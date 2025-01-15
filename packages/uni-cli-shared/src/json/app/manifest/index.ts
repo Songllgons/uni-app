@@ -1,3 +1,4 @@
+import { extend } from '@vue/shared'
 import { initRecursiveMerge } from './merge'
 import { initDefaultManifestJson } from './defaultManifestJson'
 import { initAppStatusbar } from './statusbar'
@@ -9,17 +10,22 @@ import { initSplashscreen } from './splashscreen'
 import { initConfusion } from './confusion'
 import { initUniApp } from './uniApp'
 import { initLaunchwebview } from './launchwebview'
+import { initCheckSystemWebview } from './checksystemwebview'
 import { initTabBar } from './tabBar'
 import { initI18n } from './i18n'
+import { initTheme } from '../../theme'
 
 export function normalizeAppManifestJson(
   userManifestJson: Record<string, any>,
   pagesJson: UniApp.PagesJson
 ) {
   const manifestJson = initRecursiveMerge(
-    initAppStatusbar(initDefaultManifestJson(), pagesJson),
+    initDefaultManifestJson(),
     userManifestJson
   )
+  const { pages, globalStyle, tabBar } = initTheme(manifestJson, pagesJson)
+  extend(pagesJson, JSON.parse(JSON.stringify({ pages, globalStyle, tabBar })))
+  initAppStatusbar(manifestJson, pagesJson)
   initArguments(manifestJson, pagesJson)
   initPlus(manifestJson, pagesJson)
   initNVue(manifestJson, pagesJson)
@@ -33,14 +39,21 @@ export function normalizeAppManifestJson(
     manifestJson,
     pagesJson
   )
+  // 依赖 initUniApp 先执行
+  initCheckSystemWebview(manifestJson)
 
   return initI18n(manifestJson)
 }
 
 export * from './env'
-
+export {
+  APP_CONFUSION_FILENAME,
+  isConfusionFile,
+  hasConfusionFile,
+} from './confusion'
 export {
   getNVueCompiler,
   getNVueStyleCompiler,
   getNVueFlexDirection,
 } from './nvue'
+export { parseArguments } from './arguments'

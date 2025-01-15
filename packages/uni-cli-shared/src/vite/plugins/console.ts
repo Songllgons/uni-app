@@ -1,25 +1,37 @@
 import debug from 'debug'
-import { Plugin } from 'vite'
-import { createFilter, FilterPattern } from '@rollup/pluginutils'
+import type { Plugin, ResolvedConfig } from 'vite'
+import { type FilterPattern, createFilter } from '@rollup/pluginutils'
 
 import { isJsFile, parseVueRequest } from '../utils'
-import { rewriteConsoleExpr } from '../../logs/console'
+import { restoreConsoleExpr, rewriteConsoleExpr } from '../../logs/console'
+import { withSourcemap } from '../../vite/utils/utils'
+import { isRenderjs, isWxs } from '../../filter'
 
 export interface ConsoleOptions {
+  method: string
   filename?: (filename: string) => string
   include?: FilterPattern
   exclude?: FilterPattern
 }
 
-const debugConsole = debug('vite:uni:console')
+const debugConsole = debug('uni:console')
 
 export function uniConsolePlugin(options: ConsoleOptions): Plugin {
   const filter = createFilter(options.include, options.exclude)
+  let resolvedConfig: ResolvedConfig
   return {
-    name: 'vite:uni-app-console',
+    name: 'uni:console',
     enforce: 'pre',
-    apply: 'build',
+    configResolved(config) {
+      resolvedConfig = config
+    },
     transform(code, id) {
+      if (isRenderjs(id) || isWxs(id)) {
+        return {
+          code: restoreConsoleExpr(code),
+          map: { mappings: '' },
+        }
+      }
       if (!filter(id)) return null
       if (!isJsFile(id)) return null
       let { filename } = parseVueRequest(id)
@@ -33,10 +45,13 @@ export function uniConsolePlugin(options: ConsoleOptions): Plugin {
         return null
       }
       debugConsole(id)
-      return {
-        code: rewriteConsoleExpr(filename, code),
-        map: null,
-      }
+      return rewriteConsoleExpr(
+        options.method,
+        id,
+        filename,
+        code,
+        withSourcemap(resolvedConfig)
+      )
     },
   }
 }

@@ -1,5 +1,9 @@
-import { ComponentPublicInstance } from 'vue'
+import type { ComponentPublicInstance } from 'vue'
 import { findElmById, invokeVmMethod, invokeVmMethodWithoutArgs } from '../util'
+import {
+  getPage$BasePage,
+  getPageById,
+} from '../../framework/page/getCurrentPages'
 
 const METHODS = {
   play(ctx: any) {
@@ -43,8 +47,8 @@ export function operateVideoPlayer(
   type: string,
   data?: unknown
 ) {
-  const page = getCurrentPages().find((page) => page.$page.id === pageId)
-  if (page?.$page.meta.isNVue) {
+  const page = getPageById(pageId)
+  if (page && getPage$BasePage(page).meta.isNVue) {
     const pageVm = (page as any).$vm as ComponentPublicInstance
     return METHODS[type as keyof typeof METHODS](
       findElmById(videoId, pageVm),

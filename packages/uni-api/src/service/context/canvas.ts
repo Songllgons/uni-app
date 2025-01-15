@@ -2,12 +2,16 @@ declare var __WEEX_DEVTOOL__: any
 //#region import
 import {
   API_CREATE_CANVAS_CONTEXT,
+  type API_TYPE_CREATE_CANVAS_CONTEXT,
   CreateCanvasContextProtocol,
 } from '../../protocols/context/context'
 import {
   API_CANVAS_GET_IMAGE_DATA,
   API_CANVAS_PUT_IMAGE_DATA,
   API_CANVAS_TO_TEMP_FILE_PATH,
+  type API_TYPE_CANVAS_GET_IMAGE_DATA,
+  type API_TYPE_CANVAS_PUT_IMAGE_DATA,
+  type API_TYPE_CANVAS_TO_TEMP_FILE_PATH,
   CanvasGetImageDataOptions,
   CanvasGetImageDataProtocol,
   CanvasPutImageDataOptions,
@@ -16,31 +20,34 @@ import {
   CanvasToTempFilePathProtocol,
 } from '../../protocols/context/canvas'
 
-import { defineSyncApi, defineAsyncApi } from '../../helpers/api'
-
-import type {
-  API_TYPE_CREATE_CANVAS_CONTEXT,
-  API_TYPE_CANVAS_GET_IMAGE_DATA,
-  API_TYPE_CANVAS_PUT_IMAGE_DATA,
-  API_TYPE_CANVAS_TO_TEMP_FILE_PATH,
-} from '@dcloudio/uni-api'
+import { defineAsyncApi, defineSyncApi } from '../../helpers/api'
 
 import { hasOwn } from '@vue/shared'
 
-import { once, ON_ERROR } from '@dcloudio/uni-shared'
+import { ON_ERROR, once } from '@dcloudio/uni-shared'
 
-import { getPageIdByVm, getCurrentPageVm } from '@dcloudio/uni-core'
+import { getCurrentPageVm, getPageIdByVm } from '@dcloudio/uni-core'
 
-import { TEMP_PATH } from '@dcloudio/uni-platform'
+import {
+  TEMP_PATH,
+  deflateRaw,
+  getEnv,
+  inflateRaw,
+} from '@dcloudio/uni-platform'
 
-// import pako from 'pako'
 //#endregion
 
 //#region UniServiceJSBridge
+export type OperateCanvasType =
+  | 'actionsChanged'
+  | 'getImageData'
+  | 'putImageData'
+  | 'toTempFilePath'
+
 function operateCanvas(
   canvasId: string,
   pageId: number,
-  type: unknown,
+  type: OperateCanvasType,
   data: any,
   callback?: Callback
 ) {
@@ -249,7 +256,7 @@ const predefinedColor = {
 function checkColor(e: string | undefined) {
   // 其他开发者适配的echarts会传入一个undefined到这里
   e = e || '#000000'
-  var t = null
+  let t: RegExpExecArray | null = null
   if ((t = /^#([0-9|A-F|a-f]{6})$/.exec(e)) != null) {
     const n = parseInt(t[1].slice(0, 2), 16)
     const o = parseInt(t[1].slice(2, 4), 16)
@@ -332,6 +339,14 @@ class TextMetrics {
 }
 //#endregion
 
+const getTempPath = () => {
+  let _TEMP_PATH = TEMP_PATH
+  if (__PLATFORM__ === 'app' && !__PLUS__) {
+    typeof getEnv !== 'undefined' && (_TEMP_PATH = getEnv().TEMP_PATH)
+  }
+  return _TEMP_PATH
+}
+
 const defaultState = {
   lineDash: [0, 0],
   shadowOffsetX: 0,
@@ -345,6 +360,17 @@ const defaultState = {
   fontFamily: 'sans-serif',
 }
 
+export type ToTempFilePathOptions = Pick<
+  Parameters<API_TYPE_CANVAS_TO_TEMP_FILE_PATH>[0],
+  | 'x'
+  | 'y'
+  | 'width'
+  | 'height'
+  | 'destHeight'
+  | 'destWidth'
+  | 'fileType'
+  | 'quality'
+> & { dirname: string }
 type ActionsItemType = string | number | boolean | undefined | Array<number>
 type ActionsItemData = Array<ActionsItemType>
 type ActionsItem = {
@@ -390,6 +416,113 @@ export class CanvasContext implements UniApp.CanvasContext {
       fontFamily: 'sans-serif',
     }
   }
+  setFillStyle(color: string | UniNamespace.CanvasGradient): void {
+    console.log('initCanvasContextProperty implemented.')
+  }
+  setStrokeStyle(color: string): void {
+    console.log('initCanvasContextProperty implemented.')
+  }
+  setShadow(
+    offsetX?: number | undefined,
+    offsetY?: number | undefined,
+    blur?: number | undefined,
+    color?: string | undefined
+  ): void {
+    console.log('initCanvasContextProperty implemented.')
+  }
+  addColorStop(stop: number, color: string): void {
+    console.log('initCanvasContextProperty implemented.')
+  }
+  setLineWidth(lineWidth: number): void {
+    console.log('initCanvasContextProperty implemented.')
+  }
+  setLineCap(lineCap: 'butt' | 'round' | 'square'): void {
+    console.log('initCanvasContextProperty implemented.')
+  }
+  setLineJoin(lineJoin: 'round' | 'bevel' | 'miter'): void {
+    console.log('initCanvasContextProperty implemented.')
+  }
+  setLineDash(pattern: any[], offset: number): void {
+    console.log('initCanvasContextProperty implemented.')
+  }
+  setMiterLimit(miterLimit: number): void {
+    console.log('initCanvasContextProperty implemented.')
+  }
+  fillRect(x: number, y: number, width: number, height: number): void {
+    console.log('initCanvasContextProperty implemented.')
+  }
+  strokeRect(x: number, y: number, width: number, height: number): void {
+    console.log('initCanvasContextProperty implemented.')
+  }
+  clearRect(x: number, y: number, width: number, height: number): void {
+    console.log('initCanvasContextProperty implemented.')
+  }
+  fill(): void {
+    console.log('initCanvasContextProperty implemented.')
+  }
+  stroke(): void {
+    console.log('initCanvasContextProperty implemented.')
+  }
+  scale(scaleWidth: number, scaleHeight: number): void {
+    console.log('initCanvasContextProperty implemented.')
+  }
+  rotate(rotate: number): void {
+    console.log('initCanvasContextProperty implemented.')
+  }
+  translate(x: number, y: number): void {
+    console.log('initCanvasContextProperty implemented.')
+  }
+  setFontSize(fontSize: number): void {
+    console.log('initCanvasContextProperty implemented.')
+  }
+  fillText(
+    text: string,
+    x: number,
+    y: number,
+    maxWidth?: number | undefined
+  ): void {
+    console.log('initCanvasContextProperty implemented.')
+  }
+  setTextAlign(align: 'left' | 'right' | 'center'): void {
+    console.log('initCanvasContextProperty implemented.')
+  }
+  setTextBaseline(textBaseline: 'normal' | 'top' | 'bottom' | 'middle'): void {
+    console.log('initCanvasContextProperty implemented.')
+  }
+  drawImage(
+    imageResource: string,
+    dx?: number | undefined,
+    dy?: number | undefined,
+    dWidth?: number | undefined,
+    dHeigt?: number | undefined,
+    sx?: number | undefined,
+    sy?: number | undefined,
+    sWidth?: number | undefined,
+    sHeight?: number | undefined
+  ): void {
+    console.log('initCanvasContextProperty implemented.')
+  }
+  setGlobalAlpha(alpha: number): void {
+    console.log('initCanvasContextProperty implemented.')
+  }
+  strokeText(
+    text: string,
+    x: number,
+    y: number,
+    maxWidth?: number | undefined
+  ): void {
+    console.log('initCanvasContextProperty implemented.')
+  }
+  setTransform(
+    scaleX: number,
+    skewX: number,
+    skewY: number,
+    scaleY: number,
+    translateX: number,
+    translateY: number
+  ): void {
+    console.log('initCanvasContextProperty implemented.')
+  }
 
   draw(reserve: boolean = false, callback?: Callback) {
     var actions = [...this.actions]
@@ -434,23 +567,44 @@ export class CanvasContext implements UniApp.CanvasContext {
     }
   }
 
-  measureText(text: string) {
+  measureText(text: string, callback?: Callback) {
     const font = this.state.font
     let width = 0
     if (__PLATFORM__ === 'h5') {
       width = measureText(text, font)
     } else {
-      const webview = plus.webview
-        .all()
-        .find((webview) => webview.getURL().endsWith('www/__uniappview.html'))
-      if (webview) {
-        width = Number(
-          (webview as any).evalJSSync(
-            `(${measureText.toString()})(${JSON.stringify(
-              text
-            )},${JSON.stringify(font)})`
+      if (__PLUS__ === false) {
+        if (typeof callback === 'function') {
+          const webview = plus.webview.getLaunchWebview()
+          // @ts-expect-error evalJSASync 后新增，和 plus 签名不匹配，暂时忽略 ts 报错
+          if (webview && typeof webview.evalJSAsync === 'function') {
+            ;(
+              (webview as any).evalJSAsync(
+                `(function measureText(text, font) {
+  const canvas = document.createElement('canvas')
+  const c2d = canvas.getContext('2d')
+  c2d.font = font
+  return c2d.measureText(text).width || 0
+})(${JSON.stringify(text)},${JSON.stringify(font)})`
+              ) as Promise<string>
+            ).then((res) => {
+              callback(new TextMetrics(parseFloat(res)))
+            })
+          }
+        }
+      } else {
+        const webview = plus.webview
+          .all()
+          .find((webview) => webview.getURL().endsWith('www/__uniappview.html'))
+        if (webview) {
+          width = Number(
+            (webview as any).evalJSSync(
+              `(${measureText.toString()})(${JSON.stringify(
+                text
+              )},${JSON.stringify(font)})`
+            )
           )
-        )
+        }
       }
     }
     return new TextMetrics(width)
@@ -486,6 +640,10 @@ export class CanvasContext implements UniApp.CanvasContext {
   beginPath() {
     this.path = []
     this.subpath = []
+    this.path.push({
+      method: 'beginPath',
+      data: [],
+    })
   }
 
   moveTo(x: number, y: number) {
@@ -759,32 +917,6 @@ export class CanvasContext implements UniApp.CanvasContext {
       data: [type],
     })
   }
-
-  'setFillStyle': UniApp.CanvasContext['setFillStyle']
-  'setStrokeStyle': UniApp.CanvasContext['setStrokeStyle']
-  'setGlobalAlpha': UniApp.CanvasContext['setGlobalAlpha']
-  'setShadow': UniApp.CanvasContext['setShadow']
-  'addColorStop': UniApp.CanvasContext['addColorStop']
-  'setLineWidth': UniApp.CanvasContext['setLineWidth']
-  'setLineCap': UniApp.CanvasContext['setLineCap']
-  'setLineJoin': UniApp.CanvasContext['setLineJoin']
-  'setLineDash': UniApp.CanvasContext['setLineDash']
-  'setMiterLimit': UniApp.CanvasContext['setMiterLimit']
-  'fillRect': UniApp.CanvasContext['fillRect']
-  'strokeRect': UniApp.CanvasContext['strokeRect']
-  'clearRect': UniApp.CanvasContext['clearRect']
-  'fill': UniApp.CanvasContext['fill']
-  'stroke': UniApp.CanvasContext['stroke']
-  'scale': UniApp.CanvasContext['scale']
-  'rotate': UniApp.CanvasContext['rotate']
-  'translate': UniApp.CanvasContext['translate']
-  'setFontSize': UniApp.CanvasContext['setFontSize']
-  'fillText': UniApp.CanvasContext['fillText']
-  'setTextAlign': UniApp.CanvasContext['setTextAlign']
-  'setTextBaseline': UniApp.CanvasContext['setTextBaseline']
-  'drawImage': UniApp.CanvasContext['drawImage']
-  'strokeText': UniApp.CanvasContext['strokeText']
-  'setTransform': UniApp.CanvasContext['setTransform']
 }
 
 const initCanvasContextProperty = /*#__PURE__*/ once(() => {
@@ -794,10 +926,10 @@ const initCanvasContextProperty = /*#__PURE__*/ once(() => {
         case 'fill':
         case 'stroke':
           return function () {
-            // @ts-ignore
+            // @ts-expect-error
             this.actions.push({
               method: method + 'Path',
-              // @ts-ignore
+              // @ts-expect-error
               data: [...this.path],
             })
           }
@@ -808,7 +940,7 @@ const initCanvasContextProperty = /*#__PURE__*/ once(() => {
             width: number,
             height: number
           ) {
-            // @ts-ignore
+            // @ts-expect-error
             this.actions.push({
               method: 'fillPath',
               data: [
@@ -826,7 +958,7 @@ const initCanvasContextProperty = /*#__PURE__*/ once(() => {
             width: number,
             height: number
           ) {
-            // @ts-ignore
+            // @ts-expect-error
             this.actions.push({
               method: 'strokePath',
               data: [
@@ -849,7 +981,7 @@ const initCanvasContextProperty = /*#__PURE__*/ once(() => {
             if (typeof maxWidth === 'number') {
               data.push(maxWidth)
             }
-            // @ts-ignore
+            // @ts-expect-error
             this.actions.push({
               method,
               data,
@@ -901,7 +1033,7 @@ const initCanvasContextProperty = /*#__PURE__*/ once(() => {
                 : isNumber(sWidth) && isNumber(sHeight)
                 ? [imageResource, sx, sy, sWidth, sHeight]
                 : [imageResource, sx, sy]
-            // @ts-ignore
+            // @ts-expect-error
             this.actions.push({
               method,
               data,
@@ -909,7 +1041,7 @@ const initCanvasContextProperty = /*#__PURE__*/ once(() => {
           }
         default:
           return function (...data: any) {
-            // @ts-ignore
+            // @ts-expect-error
             this.actions.push({
               method,
               data,
@@ -926,13 +1058,13 @@ const initCanvasContextProperty = /*#__PURE__*/ once(() => {
         case 'setStrokeStyle':
           return function (color: string | Data) {
             if (typeof color !== 'object') {
-              // @ts-ignore
+              // @ts-expect-error
               this.actions.push({
                 method,
                 data: ['normal', checkColor(color)],
               })
             } else {
-              // @ts-ignore
+              // @ts-expect-error
               this.actions.push({
                 method,
                 data: [color.type, color.data, color.colorStop],
@@ -942,7 +1074,7 @@ const initCanvasContextProperty = /*#__PURE__*/ once(() => {
         case 'setGlobalAlpha':
           return function (alpha: number) {
             alpha = Math.floor(255 * parseFloat(alpha as unknown as string))
-            // @ts-ignore
+            // @ts-expect-error
             this.actions.push({
               method,
               data: [alpha],
@@ -956,42 +1088,42 @@ const initCanvasContextProperty = /*#__PURE__*/ once(() => {
             color: string
           ) {
             color = checkColor(color) as any
-            // @ts-ignore
+            // @ts-expect-error
             this.actions.push({
               method,
               data: [offsetX, offsetY, blur, color],
             })
-            // @ts-ignore
+            // @ts-expect-error
             this.state.shadowBlur = blur
-            // @ts-ignore
+            // @ts-expect-error
             this.state.shadowColor = color
-            // @ts-ignore
+            // @ts-expect-error
             this.state.shadowOffsetX = offsetX
-            // @ts-ignore
+            // @ts-expect-error
             this.state.shadowOffsetY = offsetY
           }
         case 'setLineDash':
           return function (pattern: Array<number> | undefined, offset: number) {
             pattern = pattern || [0, 0]
             offset = offset || 0
-            // @ts-ignore
+            // @ts-expect-error
             this.actions.push({
               method,
               data: [pattern, offset],
             })
-            // @ts-ignore
+            // @ts-expect-error
             this.state.lineDash = pattern
           }
         case 'setFontSize':
           return function (fontSize: number) {
-            // @ts-ignore
+            // @ts-expect-error
             this.state.font = this.state.font.replace(
               /\d+\.?\d*px/,
               fontSize + 'px'
             )
-            // @ts-ignore
+            // @ts-expect-error
             this.state.fontSize = fontSize
-            // @ts-ignore
+            // @ts-expect-error
             this.actions.push({
               method,
               data: [fontSize],
@@ -999,7 +1131,7 @@ const initCanvasContextProperty = /*#__PURE__*/ once(() => {
           }
         default:
           return function (...data: any) {
-            // @ts-ignore
+            // @ts-expect-error
             this.actions.push({
               method,
               data,
@@ -1049,15 +1181,11 @@ export const canvasGetImageData =
         let imgData = data.data
         if (imgData && imgData.length) {
           if (__PLATFORM__ === 'app' && data.compressed) {
-            import('pako').then((pako) => {
-              imgData = pako.inflateRaw(imgData) as any
-              delete data.compressed
-              data.data = new Uint8ClampedArray(imgData) as any
-              resolve(data)
-            })
+            imgData = inflateRaw(imgData) as any
           }
           data.data = new Uint8ClampedArray(imgData) as any
         }
+        delete data.compressed
         resolve(data)
       }
       operateCanvas(
@@ -1114,14 +1242,12 @@ export const canvasPutImageData =
         __PLATFORM__ === 'app' &&
         (plus.os.name !== 'iOS' || typeof __WEEX_DEVTOOL__ === 'boolean')
       ) {
-        return import('pako').then((pako) => {
-          data = pako.deflateRaw(data as any, { to: 'string' }) as any
-          compressed = true
-          operate()
-        })
+        data = deflateRaw(data as any, { to: 'string' }) as any
+        compressed = true
+      } else {
+        // fix ... 操作符
+        data = Array.prototype.slice.call(data)
       }
-      // fix ... fix what?
-      data = Array.prototype.slice.call(data)
       operate()
     },
     CanvasPutImageDataProtocol,
@@ -1150,7 +1276,7 @@ export const canvasToTempFilePath =
         reject()
         return
       }
-      const dirname = `${TEMP_PATH}/canvas`
+      let dirname: string = `${getTempPath()}/canvas`
       operateCanvas(
         canvasId,
         pageId,
@@ -1165,7 +1291,7 @@ export const canvasToTempFilePath =
           fileType,
           quality,
           dirname,
-        },
+        } as ToTempFilePathOptions,
         (res: UniApp.CanvasToTempFilePathRes & { errMsg?: string }) => {
           if (res.errMsg && res.errMsg.indexOf('fail') !== -1) {
             reject('', res)

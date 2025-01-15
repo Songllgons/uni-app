@@ -1,23 +1,25 @@
+import { isString } from '@vue/shared'
+
 import {
-  defineSyncApi,
-  defineAsyncApi,
-  API_SET_STORAGE_SYNC,
-  API_TYPE_SET_STORAGE_SYNC,
+  API_GET_STORAGE,
+  API_GET_STORAGE_SYNC,
+  API_REMOVE_STORAGE,
   API_SET_STORAGE,
-  API_TYPE_SET_STORAGE,
+  API_SET_STORAGE_SYNC,
+  type API_TYPE_GET_STORAGE,
+  type API_TYPE_GET_STORAGE_SYNC,
+  type API_TYPE_REMOVE_STORAGE,
+  type API_TYPE_REMOVE_STORAGE_SYNC,
+  type API_TYPE_SET_STORAGE,
+  type API_TYPE_SET_STORAGE_SYNC,
+  GetStorageProtocol,
+  GetStorageSyncProtocol,
+  RemoveStorageProtocol,
+  RemoveStorageSyncProtocol,
   SetStorageProtocol,
   SetStorageSyncProtocol,
-  API_GET_STORAGE_SYNC,
-  GetStorageSyncProtocol,
-  API_TYPE_GET_STORAGE_SYNC,
-  API_GET_STORAGE,
-  GetStorageProtocol,
-  API_TYPE_GET_STORAGE,
-  API_TYPE_REMOVE_STORAGE_SYNC,
-  API_REMOVE_STORAGE,
-  API_TYPE_REMOVE_STORAGE,
-  RemoveStorageSyncProtocol,
-  RemoveStorageProtocol,
+  defineAsyncApi,
+  defineSyncApi,
 } from '@dcloudio/uni-api'
 
 const STORAGE_KEYS = 'uni-storage-keys'
@@ -25,14 +27,22 @@ const STORAGE_KEYS = 'uni-storage-keys'
 function parseValue(value: any) {
   const types = ['object', 'string', 'number', 'boolean', 'undefined']
   try {
-    const object = typeof value === 'string' ? JSON.parse(value) : value
+    const object = isString(value) ? JSON.parse(value) : value
     const type = object.type
     if (types.indexOf(type) >= 0) {
       const keys = Object.keys(object)
       if (keys.length === 2 && 'data' in object) {
         // eslint-disable-next-line valid-typeof
         if (typeof object.data === type) {
+          //#if _X_
+          if (type === 'object') {
+            // @ts-expect-error 访问global.UTS
+            return UTS.JSON.parse(JSON.stringify(object.data))
+          }
           return object.data
+          //#else
+          return object.data
+          //#endif
         }
         // eslint-disable-next-line no-useless-escape
         if (
@@ -49,7 +59,7 @@ function parseValue(value: any) {
   } catch (error) {}
 }
 
-export const setStorageSync = <API_TYPE_SET_STORAGE_SYNC>defineSyncApi(
+export const setStorageSync = defineSyncApi<API_TYPE_SET_STORAGE_SYNC>(
   API_SET_STORAGE_SYNC,
   (key, data) => {
     const type = typeof data
@@ -65,13 +75,13 @@ export const setStorageSync = <API_TYPE_SET_STORAGE_SYNC>defineSyncApi(
   SetStorageSyncProtocol
 )
 
-export const setStorage = <API_TYPE_SET_STORAGE>defineAsyncApi(
+export const setStorage = defineAsyncApi<API_TYPE_SET_STORAGE>(
   API_SET_STORAGE,
   ({ key, data }, { resolve, reject }) => {
     try {
       setStorageSync(key, data)
       resolve()
-    } catch (error) {
+    } catch (error: any) {
       reject(error.message)
     }
   },
@@ -80,7 +90,7 @@ export const setStorage = <API_TYPE_SET_STORAGE>defineAsyncApi(
 
 function getStorageOrigin(key: string): any {
   const value = localStorage && localStorage.getItem(key)
-  if (typeof value !== 'string') {
+  if (!isString(value)) {
     throw new Error('data not found')
   }
   let data: any = value
@@ -94,9 +104,9 @@ function getStorageOrigin(key: string): any {
   return data
 }
 
-export const getStorageSync = <API_TYPE_GET_STORAGE_SYNC>defineSyncApi(
+export const getStorageSync = defineSyncApi<API_TYPE_GET_STORAGE_SYNC>(
   API_GET_STORAGE_SYNC,
-  (key: string, t: boolean) => {
+  (key: string) => {
     try {
       return getStorageOrigin(key)
     } catch (error) {
@@ -106,7 +116,7 @@ export const getStorageSync = <API_TYPE_GET_STORAGE_SYNC>defineSyncApi(
   GetStorageSyncProtocol
 )
 
-export const getStorage = <API_TYPE_GET_STORAGE>defineAsyncApi(
+export const getStorage = defineAsyncApi<API_TYPE_GET_STORAGE>(
   API_GET_STORAGE,
   ({ key }, { resolve, reject }) => {
     try {
@@ -114,14 +124,14 @@ export const getStorage = <API_TYPE_GET_STORAGE>defineAsyncApi(
       resolve({
         data,
       })
-    } catch (error) {
+    } catch (error: any) {
       reject(error.message)
     }
   },
   GetStorageProtocol
 )
 
-export const removeStorageSync = <API_TYPE_REMOVE_STORAGE_SYNC>defineSyncApi(
+export const removeStorageSync = defineSyncApi<API_TYPE_REMOVE_STORAGE_SYNC>(
   API_REMOVE_STORAGE,
   (key) => {
     if (localStorage) {
@@ -131,7 +141,7 @@ export const removeStorageSync = <API_TYPE_REMOVE_STORAGE_SYNC>defineSyncApi(
   RemoveStorageSyncProtocol
 )
 
-export const removeStorage = <API_TYPE_REMOVE_STORAGE>defineAsyncApi(
+export const removeStorage = defineAsyncApi<API_TYPE_REMOVE_STORAGE>(
   API_REMOVE_STORAGE,
   ({ key }, { resolve }) => {
     removeStorageSync(key)
@@ -140,25 +150,28 @@ export const removeStorage = <API_TYPE_REMOVE_STORAGE>defineAsyncApi(
   RemoveStorageProtocol
 )
 
-export const clearStorageSync = <typeof uni.clearStorageSync>(
-  defineSyncApi('clearStorageSync', () => {
+export const clearStorageSync = defineSyncApi<typeof uni.clearStorageSync>(
+  'clearStorageSync',
+  () => {
     if (localStorage) {
       localStorage.clear()
     }
-  })
+  }
 )
 
-export const clearStorage = <typeof uni.clearStorage>(
-  defineAsyncApi('clearStorage', (_, { resolve }) => {
+export const clearStorage = defineAsyncApi<typeof uni.clearStorage>(
+  'clearStorage',
+  (_, { resolve }) => {
     clearStorageSync()
     resolve()
-  })
+  }
 )
 
-export const getStorageInfoSync = <typeof uni.getStorageInfoSync>(
-  defineSyncApi('getStorageInfoSync', () => {
+export const getStorageInfoSync = defineSyncApi<typeof uni.getStorageInfoSync>(
+  'getStorageInfoSync',
+  () => {
     const length = (localStorage && localStorage.length) || 0
-    const keys = []
+    const keys: string[] = []
     let currentSize = 0
     for (let index = 0; index < length; index++) {
       const key = <string>localStorage.key(index)
@@ -173,11 +186,12 @@ export const getStorageInfoSync = <typeof uni.getStorageInfoSync>(
       currentSize: Math.ceil((currentSize * 2) / 1024),
       limitSize: Number.MAX_VALUE,
     }
-  })
+  }
 )
 
-export const getStorageInfo = <typeof uni.getStorageInfo>(
-  defineAsyncApi('getStorageInfo', (_, { resolve }) => {
+export const getStorageInfo = defineAsyncApi<typeof uni.getStorageInfo>(
+  'getStorageInfo',
+  (_, { resolve }) => {
     resolve(getStorageInfoSync())
-  })
+  }
 )

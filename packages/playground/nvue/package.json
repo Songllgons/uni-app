@@ -1,0 +1,24 @@
+{
+  "name": "ssr",
+  "private": true,
+  "version": "0.0.0",
+  "scripts": {
+    "clean": "rm -rf node_modules && rm -rf package-lock.json && pnpm i",
+    "dev": "uni -d",
+    "build": "uni build",
+    "dev:app": "uni -p app",
+    "build:app": "uni build -p app"
+  },
+  "dependencies": {
+    "@dcloudio/uni-app": "../../uni-app",
+    "@dcloudio/uni-app-plus": "../../uni-app-plus",
+    "@dcloudio/uni-components": "../../uni-components",
+    "vue": "3.4.21",
+    "vue-router": "^4.3.0",
+    "vuex": "^4.1.0"
+  },
+  "devDependencies": {
+    "@dcloudio/vite-plugin-uni": "../../vite-plugin-uni",
+    "vite": "^5.2.8"
+  }
+}

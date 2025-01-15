@@ -2,7 +2,12 @@ import { TABBAR_HEIGHT } from '@dcloudio/uni-shared'
 
 import { getRealPath } from '../../../platform/getRealPath'
 
-const isIOS = plus.os.name === 'iOS'
+import {
+  API_ON_TAB_BAR_MID_BUTTON_TAP,
+  type OnTabBarMidButtonTap,
+} from '@dcloudio/uni-api'
+
+import { useTabBarThemeChange } from '../../theme'
 
 let config: UniApp.TabBarOptions
 
@@ -46,6 +51,15 @@ function setTabBarBadge(
   }
 }
 /**
+ * 动态设置 tabBar 多项的内容
+ */
+function setTabBarItems(tabBarConfig: {
+  list: Partial<UniApp.TabBarItemBaseOptions>[]
+  midButton?: Partial<UniApp.TabBarMidButtonOptions>
+}) {
+  tabBar && tabBar.setTabBarItems(tabBarConfig)
+}
+/**
  * 动态设置 tabBar 某一项的内容
  */
 function setTabBarItem(
@@ -53,9 +67,13 @@ function setTabBarItem(
   text?: string,
   iconPath?: string,
   selectedIconPath?: string,
-  visible?: boolean
+  visible?: boolean,
+  iconfont?: UniApp.SetTabBarItemIconFontOptions
 ) {
-  type TabBarItem = Record<string, string | number | boolean | undefined>
+  type TabBarItem = Record<
+    string,
+    string | number | boolean | undefined | UniApp.SetTabBarItemIconFontOptions
+  >
   const item: TabBarItem = {
     index,
   }
@@ -68,6 +86,9 @@ function setTabBarItem(
   if (selectedIconPath) {
     item.selectedIconPath = getRealPath(selectedIconPath)
   }
+  if (iconfont !== undefined) {
+    item.iconfont = iconfont
+  }
   if (visible !== undefined) {
     item.visible = config.list[index].visible = visible
     delete item.index
@@ -77,7 +98,7 @@ function setTabBarItem(
     }))
     tabbarItems[index] = item
 
-    tabBar && tabBar.setTabBarItems({ list: tabbarItems })
+    setTabBarItems({ list: tabbarItems })
   } else {
     tabBar && tabBar.setTabBarItem(item)
   }
@@ -136,10 +157,15 @@ export default {
       })
     tabBar &&
       tabBar.onMidButtonClick(() => {
-        // publish('onTabBarMidButtonTap', {})
+        return UniServiceJSBridge.invokeOnCallback<OnTabBarMidButtonTap>(
+          API_ON_TAB_BAR_MID_BUTTON_TAP
+        )
       })
+
+    useTabBarThemeChange(tabBar, options)
   },
   indexOf(page: string) {
+    const config = this.config
     const itemLength = config && config.list && config.list.length
     if (itemLength) {
       for (let i = 0; i < itemLength; i++) {
@@ -184,10 +210,14 @@ export default {
         }
       )
   },
+  get config() {
+    return config || __uniConfig.tabBar
+  },
   get visible() {
     return visible
   },
   get height() {
+    const config = this.config
     return (
       (config && config.height ? parseFloat(config.height) : TABBAR_HEIGHT) +
       plus.navigator.getSafeAreaInsets().deviceBottom!
@@ -195,8 +225,9 @@ export default {
   },
   // tabBar是否遮挡内容区域
   get cover() {
+    const config = this.config
     const array = ['extralight', 'light', 'dark']
-    return isIOS && array.indexOf(config.blurEffect as string) >= 0
+    return config && array.indexOf(config.blurEffect as string) >= 0
   },
   setStyle({ mask }: { mask: string }) {
     tabBar.setMask({

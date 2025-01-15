@@ -1,0 +1,24 @@
+{
+  "name": "@dcloudio/uts",
+  "version": "3.0.0-alpha-4040120241205001",
+  "description": "uts",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": [
+    "bin",
+    "dist"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/dcloudio/uni-app.git",
+    "directory": "packages/uts"
+  },
+  "optionalDependencies": {
+    "@dcloudio/uts-darwin-arm64": "workspace:*",
+    "@dcloudio/uts-darwin-x64": "workspace:*",
+    "@dcloudio/uts-linux-x64-gnu": "workspace:*",
+    "@dcloudio/uts-linux-x64-musl": "workspace:*",
+    "@dcloudio/uts-win32-ia32-msvc": "workspace:*",
+    "@dcloudio/uts-win32-x64-msvc": "workspace:*"
+  }
+}

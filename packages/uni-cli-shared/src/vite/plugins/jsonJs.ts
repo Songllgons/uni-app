@@ -1,7 +1,8 @@
 import fs from 'fs'
 import path from 'path'
+import { JSON_JS_MAP } from '../../constants'
 import { normalizePath } from '../../utils'
-import {
+import type {
   CreateUniViteFilterPlugin,
   UniViteFilterPluginOptions,
 } from '../utils/plugin'
@@ -11,7 +12,7 @@ export const defineUniManifestJsonPlugin =
   createDefineJsonJsPlugin('manifest.json')
 
 function createDefineJsonJsPlugin(name: 'pages.json' | 'manifest.json') {
-  const JSON_JS = name + '.js'
+  const JSON_JS = JSON_JS_MAP[name]
   return function (createVitePlugin: CreateUniViteFilterPlugin) {
     const opts = {
       resolvedConfig: {},
@@ -21,25 +22,27 @@ function createDefineJsonJsPlugin(name: 'pages.json' | 'manifest.json') {
     } as UniViteFilterPluginOptions
 
     const plugin = createVitePlugin(opts)
-    const origLoad = plugin.load
-    const origResolveId = plugin.resolveId
-    const origConfigResolved = plugin.configResolved
+    const origLoad = plugin.load as Function
+    const origResolveId = plugin.resolveId as Function
+    const origConfigResolved = plugin.configResolved as Function
 
     let jsonPath = ''
+    let jsonJsPath = ''
 
-    plugin.resolveId = function (id, importer, options, ssr) {
+    plugin.resolveId = function (id, importer, options) {
       const res =
-        origResolveId && origResolveId.call(this, id, importer, options, ssr)
+        origResolveId && origResolveId.call(this, id, importer, options)
       if (res) {
         return res
       }
       if (id.endsWith(JSON_JS)) {
-        return jsonPath + '.js'
+        return jsonJsPath
       }
     }
     plugin.configResolved = function (config) {
       opts.resolvedConfig = config
       jsonPath = normalizePath(path.join(process.env.UNI_INPUT_DIR, name))
+      jsonJsPath = normalizePath(path.join(process.env.UNI_INPUT_DIR, JSON_JS))
       return origConfigResolved && origConfigResolved(config)
     }
 

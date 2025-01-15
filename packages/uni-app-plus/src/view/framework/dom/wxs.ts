@@ -1,16 +1,16 @@
 import { isArray, isFunction } from '@vue/shared'
 import {
+  WXS_MODULES,
+  WXS_PROTOCOL,
   formatLog,
   getValueByDataPath,
-  WXS_PROTOCOL,
-  WXS_MODULES,
 } from '@dcloudio/uni-shared'
 import {
   createComponentDescriptorVm,
   getComponentDescriptor,
 } from '@dcloudio/uni-core'
-import { UniCustomElement } from './components'
-import { UniNode } from './elements/UniNode'
+import type { UniCustomElement } from './components'
+import type { UniNode } from './elements/UniNode'
 
 declare global {
   interface Window {
@@ -45,12 +45,12 @@ export function invokeWxs(
   const ownerEl = resolveOwnerEl(el!, ownerId)
   if (isArray(invokerArgs) || isArray(args)) {
     // methods
-    const [moduleName, mehtodName] = invoker.split('.')
+    const [moduleName, methodName] = invoker.split('.')
     return invokeWxsMethod(
       ownerEl,
       moduleId,
       moduleName,
-      mehtodName,
+      methodName,
       invokerArgs || args
     )
   }
@@ -63,9 +63,9 @@ export function invokeWxsEvent(
   event: Record<string, any>
 ) {
   const [ownerId, moduleId, invoker] = parseWxs(wxsStr)
-  const [moduleName, mehtodName] = invoker.split('.')
+  const [moduleName, methodName] = invoker.split('.')
   const ownerEl = resolveOwnerEl(el, ownerId)
-  return invokeWxsMethod(ownerEl, moduleId, moduleName, mehtodName, [
+  return invokeWxsMethod(ownerEl, moduleId, moduleName, methodName, [
     wrapperWxsEvent(event, el),
     getComponentDescriptor(createComponentDescriptorVm(ownerEl), false),
   ])
@@ -86,7 +86,7 @@ function resolveOwnerEl(el: UniCustomElement, ownerId: number) {
 }
 
 function parseWxs(wxsStr: string) {
-  return JSON.parse(wxsStr.substr(WXS_PROTOCOL_LEN)) as [
+  return JSON.parse(wxsStr.slice(WXS_PROTOCOL_LEN)) as [
     number,
     string,
     string,
@@ -102,8 +102,8 @@ export function invokeWxsProps(
 ) {
   const [ownerId, moduleId, invoker] = parseWxs(wxsStr)
   const ownerEl = resolveOwnerEl(el, ownerId)
-  const [moduleName, mehtodName] = invoker.split('.')
-  return invokeWxsMethod(ownerEl, moduleId, moduleName, mehtodName, [
+  const [moduleName, methodName] = invoker.split('.')
+  return invokeWxsMethod(ownerEl, moduleId, moduleName, methodName, [
     newValue,
     oldValue,
     getComponentDescriptor(createComponentDescriptorVm(ownerEl), false),
@@ -124,7 +124,7 @@ function invokeWxsMethod(
       formatLog('wxs', 'module ' + moduleName + ' not found')
     )
   }
-  const method = module[methodName]
+  const method = (module as Record<string, any>)[methodName]
   if (!isFunction(method)) {
     return console.error(moduleName + '.' + methodName + ' is not a function')
   }
@@ -140,7 +140,7 @@ function getWxsProp(
   if (!module) {
     return console.error(formatLog('wxs', 'module ' + dataPath + ' not found'))
   }
-  return getValueByDataPath(module, dataPath.substr(dataPath.indexOf('.') + 1))
+  return getValueByDataPath(module, dataPath.slice(dataPath.indexOf('.') + 1))
 }
 
 export type WxsPropsInvoker = (newValue: unknown) => void

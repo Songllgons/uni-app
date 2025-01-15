@@ -1,34 +1,51 @@
+import type { LogLevel } from 'vite'
 import { cac } from 'cac'
-
-import { LogLevel } from 'vite'
-
+import { fixBinaryPath } from '@dcloudio/uni-cli-shared'
 import { PLATFORMS } from './utils'
 import { runBuild, runDev } from './action'
+
+fixBinaryPath()
 
 const cli = cac('uni')
 
 export interface CliOptions {
   '--'?: string[]
 
+  c?: boolean | string
+  config?: string
+
   platform?: string
   p?: string
   ssr?: boolean
 
+  base?: string
   debug?: boolean | string
   d?: boolean | string
   filter?: string
   f?: string
   logLevel?: LogLevel
   l?: LogLevel
+  m?: string
+  mode?: string
   clearScreen?: boolean
+
   autoHost?: string
   autoPort?: number
+
+  devtools?: boolean
+  devtoolsHost?: string
+  devtoolsPort?: number
+
+  subpackage?: string
+  plugin?: string
 }
 
 cli
+  .option('-c, --config <file>', `[string] use specified config file`)
   .option('-p, --platform [platform]', '[string] ' + PLATFORMS.join(' | '), {
     default: 'h5',
   })
+  .option('--base <path>', `[string] public base path (default: /)`)
   .option('-ssr', '[boolean] server-side rendering', {
     default: false,
   })
@@ -36,8 +53,19 @@ cli
   .option('--clearScreen', `[boolean] allow/disable clear screen when logging`)
   .option('-d, --debug [feat]', `[string | boolean] show debug logs`)
   .option('-f, --filter <filter>', `[string] filter debug logs`)
-  .option('--autoHost', `[string] specify automator hostname`)
-  .option('--autoPort', `[number] specify automator port`)
+  .option('-m, --mode <mode>', `[string] set env mode`)
+  .option(
+    '--minify [minifier]',
+    `[boolean | "terser" | "esbuild"] enable/disable minification, ` +
+      `or specify minifier to use (default: terser)`
+  )
+  .option('--autoHost [autoHost]', `[string] specify automator hostname`)
+  .option('--autoPort [autoPort]', `[number] specify automator port`)
+  .option('--devtools', `[boolean] enable devtools`)
+  .option('--devtoolsHost [devtoolsHost]', `[string] specify devtools hostname`)
+  .option('--devtoolsPort [devtoolsPort]', `[number] specify devtools port`)
+  .option('--subpackage [subpackage]', `[string] specify subpackage to build`)
+  .option('--plugin [plugin]', `[string] specify plugin to build`)
 
 cli
   .command('')
@@ -65,11 +93,6 @@ cli
     '--sourcemap',
     `[boolean] output source maps for build (default: false)`
   )
-  .option(
-    '--minify [minifier]',
-    `[boolean | "terser" | "esbuild"] enable/disable minification, ` +
-      `or specify minifier to use (default: terser)`
-  )
   .option('--manifest', `[boolean] emit build manifest json`)
   .option('--ssrManifest', `[boolean] emit ssr manifest json`)
   .option(
@@ -79,7 +102,6 @@ cli
       default: true,
     }
   )
-  .option('-m, --mode <mode>', `[string] set env mode`)
   .option('-w, --watch', `[boolean] rebuilds when modules have changed on disk`)
   .action(runBuild)
 

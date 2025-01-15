@@ -1,11 +1,11 @@
 import {
-  defineTaskApi,
+  type API_TYPE_UPLOAD_FILE,
   API_UPLOAD_FILE,
-  API_TYPE_UPLOAD_FILE,
-  UploadFileProtocol,
   UploadFileOptions,
+  UploadFileProtocol,
+  defineTaskApi,
 } from '@dcloudio/uni-api'
-import { hasOwn } from '@vue/shared'
+import { hasOwn, isFunction } from '@vue/shared'
 import { getRealPath } from '@dcloudio/uni-platform'
 
 type Uploader = ReturnType<typeof plus.uploader.createUpload>
@@ -35,7 +35,7 @@ class UploadTask implements UniApp.UploadTask {
   }
 
   onProgressUpdate(callback: Function) {
-    if (typeof callback !== 'function') {
+    if (!isFunction(callback)) {
       return
     }
     this._callbacks.push(callback)
@@ -59,6 +59,10 @@ export const uploadFile = defineTaskApi<API_TYPE_UPLOAD_FILE>(
     { url, timeout, header, formData, files, filePath, name },
     { resolve, reject }
   ) => {
+    timeout =
+      (timeout ||
+        (__uniConfig.networkTimeout && __uniConfig.networkTimeout.uploadFile) ||
+        60 * 1000) / 1000
     const uploader = plus.uploader.createUpload(
       url,
       {

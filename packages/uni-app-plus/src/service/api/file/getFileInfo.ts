@@ -1,17 +1,17 @@
 import { extend } from '@vue/shared'
 import {
-  defineAsyncApi,
   API_GET_FILE_INFO,
-  API_TYPE_GET_FILE_INFO,
-  GetFileInfoProtocol,
+  type API_TYPE_GET_FILE_INFO,
   GetFileInfoOptions,
+  GetFileInfoProtocol,
+  defineAsyncApi,
 } from '@dcloudio/uni-api'
 import {
-  warpPlusSuccessCallback,
   warpPlusErrorCallback,
+  warpPlusSuccessCallback,
 } from '../../../helpers/plus'
 
-export const getFileInfo = <API_TYPE_GET_FILE_INFO>defineAsyncApi(
+export const getFileInfo = defineAsyncApi<API_TYPE_GET_FILE_INFO>(
   API_GET_FILE_INFO,
   (options, { resolve, reject }) => {
     plus.io.getFileInfo(

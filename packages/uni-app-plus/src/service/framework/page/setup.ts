@@ -1,26 +1,27 @@
 import { initPageVm, invokeHook } from '@dcloudio/uni-core'
 import {
   EventChannel,
-  formatLog,
   ON_READY,
   ON_UNLOAD,
+  formatLog,
 } from '@dcloudio/uni-shared'
 import {
-  nextTick,
-  ComponentPublicInstance,
+  type ComponentPublicInstance,
   getCurrentInstance,
+  nextTick,
   onBeforeUnmount,
   onMounted,
 } from 'vue'
-import { VuePageComponent } from './define'
+import type { VuePageComponent } from './define'
 import { addCurrentPage } from './getCurrentPages'
+import { setupXPage } from '../../../x/framework/page/setup'
 
 export function setupPage(component: VuePageComponent) {
   const oldSetup = component.setup
   component.inheritAttrs = false // 禁止继承 __pageId 等属性，避免告警
-  component.setup = (_, ctx) => {
+  component.setup = (props, ctx) => {
     const {
-      attrs: { __pageId, __pagePath, __pageQuery, __pageInstance },
+      attrs: { __pageId, __pagePath, /*__pageQuery,*/ __pageInstance },
     } = ctx
     if (__DEV__) {
       console.log(formatLog(__pagePath as string, 'setup'))
@@ -28,41 +29,67 @@ export function setupPage(component: VuePageComponent) {
     const instance = getCurrentInstance()!
     const pageVm = instance.proxy!
     initPageVm(pageVm, __pageInstance as Page.PageInstance['$page'])
-    addCurrentPage(
-      initScope(
+    if (__X__) {
+      setupXPage(
+        instance,
+        __pageInstance as Page.PageInstance['$page'],
+        pageVm,
+        __pageId as number,
+        __pagePath as string
+      )
+    } else {
+      addCurrentPageWithInitScope(
         __pageId as number,
         pageVm,
         __pageInstance as Page.PageInstance['$page']
       )
-    )
-    onMounted(() => {
-      nextTick(() => {
-        // onShow被延迟，故onReady也同时延迟
-        invokeHook(pageVm, ON_READY)
+      onMounted(() => {
+        nextTick(() => {
+          // onShow被延迟，故onReady也同时延迟
+          invokeHook(pageVm, ON_READY)
+        })
+        // TODO preloadSubPackages
       })
-      // TODO preloadSubPackages
-    })
-    onBeforeUnmount(() => {
-      invokeHook(pageVm, ON_UNLOAD)
-    })
+      onBeforeUnmount(() => {
+        invokeHook(pageVm, ON_UNLOAD)
+      })
+    }
     if (oldSetup) {
-      return oldSetup(__pageQuery as any, ctx)
+      return oldSetup(props, ctx)
     }
   }
   return component
 }
 
-function initScope(
+export function initScope(
   pageId: number,
   vm: ComponentPublicInstance,
   pageInstance: Page.PageInstance['$page']
 ) {
-  const $getAppWebview = () => {
-    return plus.webview.getWebviewById(pageId + '')
-  }
-  vm.$getAppWebview = $getAppWebview
-  ;(vm.$ as any).ctx!.$scope = {
-    $getAppWebview,
+  if (!__X__) {
+    const $getAppWebview = () => {
+      return plus.webview.getWebviewById(pageId + '')
+    }
+    vm.$getAppWebview = $getAppWebview
+    ;(vm.$ as any).ctx!.$scope = {
+      $getAppWebview,
+    }
+  } else {
+    Object.defineProperty(vm, '$viewToTempFilePath', {
+      get() {
+        return vm.$nativePage!.viewToTempFilePath.bind(vm.$nativePage!)
+      },
+    })
+    Object.defineProperty(vm, '$getPageStyle', {
+      get() {
+        return vm.$nativePage!.getPageStyle.bind(vm.$nativePage!)
+      },
+    })
+    Object.defineProperty(vm, '$setPageStyle', {
+      get() {
+        return vm.$nativePage!.setPageStyle.bind(vm.$nativePage!)
+      },
+    })
   }
   vm.getOpenerEventChannel = () => {
     if (!pageInstance.eventChannel) {
@@ -71,4 +98,12 @@ function initScope(
     return pageInstance.eventChannel as EventChannel
   }
   return vm
+}
+
+export function addCurrentPageWithInitScope(
+  pageId: number,
+  pageVm: ComponentPublicInstance,
+  pageInstance: Page.PageInstance['$page']
+) {
+  addCurrentPage(initScope(pageId, pageVm, pageInstance))
 }

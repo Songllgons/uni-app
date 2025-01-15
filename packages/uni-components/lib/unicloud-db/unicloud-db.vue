@@ -17,6 +17,8 @@ import { ssrRef, shallowSsrRef } from '@dcloudio/uni-app'
 import { initVueI18n } from '@dcloudio/uni-i18n'
 import messages from './i18n/index'
 
+const isArray = Array.isArray
+
 const { t } = initVueI18n(messages)
 
 const events = {
@@ -52,7 +54,7 @@ export default {
   // #ifdef VUE3
   setup(props) {
     // 单条记录时，使用shallowRef（仅支持赋值修改），列表时，采用ref（支持push等修改）
-    const dataListRef = props.getone ? shallowSsrRef(undefined) : ssrRef([])
+    const dataListRef = props.ssrKey ? (props.getone ? shallowSsrRef(undefined, props.ssrKey) : ssrRef([], props.ssrKey)) : (props.getone ? shallowSsrRef(undefined) : ssrRef([]))
     const instance = getCurrentInstance()
     onMounted(() => {
       // client端判断是否需要再次请求数据（正常情况下，SSR返回的html中已包含此数据状态，无需再次额外请求）
@@ -72,6 +74,12 @@ export default {
   props: {
     options: {
       type: [Object, Array],
+      default() {
+        return {}
+      }
+    },
+    spaceInfo: {
+      type: Object,
       default() {
         return {}
       }
@@ -159,6 +167,10 @@ export default {
     manual: {
       type: Boolean,
       default: false
+    },
+    ssrKey: {
+      type: [String, Number],
+      default: ""
     }
   },
   data() {
@@ -174,10 +186,10 @@ export default {
   },
   computed: {
     collectionArgs () {
-      return Array.isArray(this.collection) ? this.collection : [this.collection]
+      return isArray(this.collection) ? this.collection : [this.collection]
     },
     isLookup () {
-      return (Array.isArray(this.collection) && this.collection.length > 1) || (typeof this.collection === 'string' && this.collection.indexOf(',') > -1)
+      return (isArray(this.collection) && this.collection.length > 1) || (typeof this.collection === 'string' && this.collection.indexOf(',') > -1)
     },
     mainCollection () {
       if (typeof this.collection === 'string') {
@@ -328,7 +340,7 @@ export default {
         })
       }
       /* eslint-disable no-undef */
-      let db = uniCloud.database()
+      let db = uniCloud.database(this.spaceInfo)
       if (action) {
         db = db.action(action)
       }
@@ -401,8 +413,7 @@ export default {
           title: loadingTitle
         })
       }
-      /* eslint-disable no-undef */
-      let db = uniCloud.database()
+      let db = uniCloud.database(this.spaceInfo)
       if (action) {
         db = db.action(action)
       }
@@ -430,8 +441,7 @@ export default {
       })
     },
     getTemp(isTemp = true) {
-      /* eslint-disable no-undef */
-      let db = uniCloud.database()
+      let db = uniCloud.database(this.spaceInfo)
 
       if (this.action) {
         db = db.action(this.action)
@@ -439,14 +449,14 @@ export default {
 
       db = db.collection(...this.collectionArgs)
 
+      if (this.foreignKey) {
+        db = db.foreignKey(this.foreignKey)
+      }
       if (!(!this.where || !Object.keys(this.where).length)) {
         db = db.where(this.where)
       }
       if (this.field) {
         db = db.field(this.field)
-      }
-      if (this.foreignKey) {
-        db = db.foreignKey(this.foreignKey)
       }
       if (this.groupby) {
         db = db.groupBy(this.groupby)
@@ -555,7 +565,7 @@ export default {
         return
       }
 
-      const ids = Array.isArray(id) ? id : [id]
+      const ids = isArray(id) ? id : [id]
       if (!ids.length) {
         return
       }
@@ -567,8 +577,7 @@ export default {
         })
       }
 
-      /* eslint-disable no-undef */
-      const db = uniCloud.database()
+      const db = uniCloud.database(this.spaceInfo)
       const dbCmd = db.command
 
       let exec = db

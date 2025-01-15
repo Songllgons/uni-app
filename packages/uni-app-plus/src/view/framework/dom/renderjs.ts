@@ -1,8 +1,16 @@
-import { createApp, ComponentOptions, ComponentPublicInstance } from 'vue'
-import { formatLog, RENDERJS_MODULES } from '@dcloudio/uni-shared'
+import {
+  type ComponentOptions,
+  type ComponentPublicInstance,
+  createApp,
+} from 'vue'
+import { RENDERJS_MODULES, formatLog } from '@dcloudio/uni-shared'
+import {
+  createComponentDescriptorVm,
+  getComponentDescriptor,
+} from '@dcloudio/uni-core'
 
-import { UniNode } from './elements/UniNode'
-import { UniCustomElement } from './components'
+import type { UniNode } from './elements/UniNode'
+import type { UniCustomElement } from './components'
 
 export function initRenderjs(node: UniNode, moduleIds: Record<string, string>) {
   Object.keys(moduleIds).forEach((name) => {
@@ -27,7 +35,7 @@ function initRenderjsModule(node: UniNode, moduleId: string) {
   }
   const el = node.$ as UniCustomElement
   ;(el.__renderjsInstances || (el.__renderjsInstances = {}))[moduleId] =
-    createRenderjsInstance(options)
+    createRenderjsInstance(el, options)
 }
 
 function getRenderjsModule(moduleId: string) {
@@ -41,9 +49,19 @@ function getRenderjsModule(moduleId: string) {
 }
 
 function createRenderjsInstance(
+  el: UniCustomElement,
   options: ComponentOptions
 ): ComponentPublicInstance {
   options = options.default || options
   options.render = () => {}
-  return createApp(options).mount(document.createElement('div'))
+  return createApp(options)
+    .mixin({
+      mounted() {
+        this.$ownerInstance = getComponentDescriptor(
+          createComponentDescriptorVm(el),
+          false
+        )
+      },
+    })
+    .mount(document.createElement('div'))
 }

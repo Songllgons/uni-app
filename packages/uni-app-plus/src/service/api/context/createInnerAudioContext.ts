@@ -1,4 +1,4 @@
-import { extend, capitalize } from '@vue/shared'
+import { capitalize, extend, isFunction } from '@vue/shared'
 import {
   API_CREATE_INNER_AUDIO_CONTEXT,
   defineSyncApi,
@@ -6,7 +6,7 @@ import {
 import type { API_TYPE_CREATEE_INNER_AUDIO_CONTEXT } from '@dcloudio/uni-api'
 import { once } from '@dcloudio/uni-shared'
 import {
-  InnerAudioContextEvent,
+  type InnerAudioContextEvent,
   innerAudioContextEventNames,
   innerAudioContextOffEventNames,
 } from '@dcloudio/uni-api'
@@ -19,12 +19,24 @@ type ExtendAudio = {
   startTime?: number
   isStopped?: boolean
   initStateChage?: boolean
+  playbackRate?: (rate: number) => void
 }
 type Audio = PlusAudioAudioPlayer & ExtendAudio
 type AudioEvnets = NonNullable<
   Parameters<PlusAudioAudioPlayer['addEventListener']>[0]
 >
 type OperationType = 'play' | 'pause' | 'stop' | 'seek'
+type AudioState = {
+  audioId: string
+  autoplay?: boolean
+  loop?: boolean
+  obeyMuteSwitch?: boolean
+  src?: string
+  startTime?: number
+  volume?: number
+  sessionCategory?: string
+  playbackRate?: number
+}
 
 const audios: Record<string, Audio> = {}
 const evts: AudioEvnets[] = [
@@ -37,6 +49,9 @@ const evts: AudioEvnets[] = [
   'seeked',
   'pause',
 ]
+
+const AUDIO_DEFAULT_SESSION_CATEGORY: string = 'playback'
+const TIME_UPDATE = 200
 
 const initStateChage = (audioId: string) => {
   const audio = audios[audioId]
@@ -78,6 +93,7 @@ function createAudioInstance() {
   audio.src = ''
   audio.volume = 1
   audio.startTime = 0
+  audio.setSessionCategory(AUDIO_DEFAULT_SESSION_CATEGORY)
   return {
     errMsg: 'createAudioInstance:ok',
     audioId,
@@ -92,15 +108,9 @@ function setAudioState({
   loop = false,
   obeyMuteSwitch,
   volume,
-}: {
-  audioId: string
-  autoplay?: boolean
-  loop?: boolean
-  obeyMuteSwitch?: boolean
-  src?: string
-  startTime?: number
-  volume?: number
-}) {
+  sessionCategory = AUDIO_DEFAULT_SESSION_CATEGORY,
+  playbackRate,
+}: AudioState) {
   const audio = audios[audioId]
   if (audio) {
     const style: { loop: boolean; autoplay: boolean } & ExtendAudio = {
@@ -108,7 +118,9 @@ function setAudioState({
       autoplay,
     }
     if (src) {
-      audio.src = style.src = getRealPath(src)
+      // iOS 设置 src 会重新播放
+      const realSrc = getRealPath(src)
+      if (audio.src !== realSrc) audio.src = style.src = realSrc
     }
     if (startTime) {
       audio.startTime = style.startTime = startTime
@@ -117,6 +129,12 @@ function setAudioState({
       audio.volume = style.volume = volume
     }
     audio.setStyles(style)
+    if (sessionCategory) {
+      audio.setSessionCategory(sessionCategory)
+    }
+    if (playbackRate && audio.playbackRate) {
+      audio.playbackRate(playbackRate)
+    }
     initStateChage(audioId)
   }
   return {
@@ -191,12 +209,13 @@ const onAudioStateChange = ({
     emit(audio, state, errMsg, errCode)
     if (state === 'play') {
       const oldCurrentTime = audio.currentTime
+      emit(audio, 'timeUpdate' as any)
       audio.__timing = setInterval(() => {
         const currentTime = audio.currentTime
         if (currentTime !== oldCurrentTime) {
           emit(audio, 'timeUpdate' as any)
         }
-      }, 200)
+      }, TIME_UPDATE)
     } else if (state === 'pause' || state === 'stop' || state === 'error') {
       clearInterval(audio.__timing!)
     }
@@ -248,6 +267,10 @@ const props = [
   {
     name: 'volume',
   },
+  {
+    name: 'playbackRate',
+    cache: true,
+  },
 ]
 
 class InnerAudioContext implements UniApp.InnerAudioContext {
@@ -292,6 +315,10 @@ class InnerAudioContext implements UniApp.InnerAudioContext {
    */
   'volume': UniApp.InnerAudioContext['volume']
   /**
+   * 播放的倍率。可取值： 0.5/0.8/1.0/1.25/1.5/2.0，默认值为1.0。（仅 App 支持）。
+   */
+  'playbackRate': UniApp.InnerAudioContext['playbackRate']
+  /**
    * 事件监听
    */
   _callbacks: Partial<
@@ -326,7 +353,7 @@ class InnerAudioContext implements UniApp.InnerAudioContext {
             : getAudioState({
                 audioId: this.id,
               })
-          const value = name in result ? result[name] : item.default
+          const value = name in result ? (result as any)[name] : item.default
           return typeof value === 'number' && name !== 'volume'
             ? value / 1e3
             : value
@@ -410,7 +437,7 @@ const initInnerAudioContextEventOnce = /*#__PURE__*/ once(() => {
   // 批量设置音频上下文事件监听方法
   innerAudioContextEventNames.forEach((eventName) => {
     InnerAudioContext.prototype[eventName] = function (callback: Function) {
-      if (typeof callback === 'function') {
+      if (isFunction(callback)) {
         this._callbacks[eventName]!.push(callback)
       }
     }
@@ -436,7 +463,7 @@ function emit(
 ) {
   const name = `on${capitalize(state)}` as InnerAudioContextEvent
   audio._callbacks[name]!.forEach((callback) => {
-    if (typeof callback === 'function') {
+    if (isFunction(callback)) {
       callback(
         state === 'error'
           ? {

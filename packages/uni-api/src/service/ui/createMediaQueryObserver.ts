@@ -1,5 +1,6 @@
-import { ComponentPublicInstance } from 'vue'
+import type { ComponentPublicInstance } from 'vue'
 import { isFunction } from '@vue/shared'
+import { resolveComponentInstance } from '@dcloudio/uni-shared'
 import { getCurrentPageVm, getPageIdByVm } from '@dcloudio/uni-core'
 import { defineSyncApi } from '../../helpers/api'
 import {
@@ -27,7 +28,8 @@ class ServiceMediaQueryObserver {
   private _component: ComponentPublicInstance
 
   constructor(component: ComponentPublicInstance) {
-    this._pageId = component.$page && component.$page.id
+    this._pageId =
+      component.$page && (component.$page as Page.PageInstance['$page']).id
     this._component = component
   }
 
@@ -65,6 +67,7 @@ class ServiceMediaQueryObserver {
 export const createMediaQueryObserver = defineSyncApi<
   typeof uni.createMediaQueryObserver
 >('createMediaQueryObserver', (context?: any) => {
+  context = resolveComponentInstance(context)
   if (context && !getPageIdByVm(context)) {
     context = null
   }

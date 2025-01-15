@@ -1,6 +1,6 @@
-import { computed, Ref, reactive, watch, onBeforeUnmount } from 'vue'
-import { CustomEventTrigger } from '@dcloudio/uni-components'
-import { Position, useNative } from './useNative'
+import { type Ref, computed, onBeforeUnmount, reactive, watch } from 'vue'
+import type { CustomEventTrigger } from '@dcloudio/uni-components'
+import { type Position, useNative } from './useNative'
 import { formatLog } from '@dcloudio/uni-shared'
 
 let id = 0
@@ -12,6 +12,7 @@ export function useCover(
 ) {
   const { position, hidden, onParentReady } = useNative(rootRef)
   let cover: PlusNativeObjView
+  let requestStyleUpdate: () => void
   onParentReady((parentPosition) => {
     const viewPosition = computed(() => {
       const object: Position = {} as Position
@@ -69,7 +70,7 @@ export function useCover(
     }
     const style = reactive(updateStyle({} as CSSStyleDeclaration))
     let request: null | number = null
-    function requestStyleUpdate() {
+    requestStyleUpdate = function () {
       if (request) {
         cancelAnimationFrame(request)
       }
@@ -208,6 +209,9 @@ export function useCover(
   onBeforeUnmount(() => {
     if (cover) {
       cover.close()
+    }
+    if (requestStyleUpdate) {
+      window.removeEventListener('updateview', requestStyleUpdate)
     }
   })
 }

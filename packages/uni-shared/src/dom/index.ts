@@ -1,6 +1,6 @@
 import { isString } from '@vue/shared'
 import { getCustomDataset } from './customDataset'
-export { initCustomDataset, getCustomDataset } from './customDataset'
+export { initCustomDatasetOnce, getCustomDataset } from './customDataset'
 
 export * from './style'
 
@@ -37,7 +37,7 @@ export function addFont(
   }
   return new Promise((resolve) => {
     const style = document.createElement('style')
-    const values = []
+    const values: string[] = []
     if (desc) {
       const { style, weight, stretch, unicodeRange, variant, featureSettings } =
         desc as FontFaceDescriptors
@@ -56,14 +56,24 @@ export function addFont(
   })
 }
 
-export function scrollTo(scrollTop: number | string, duration: number) {
+export function scrollTo(
+  scrollTop: number | string,
+  duration: number,
+  isH5?: boolean
+) {
   if (isString(scrollTop)) {
     const el = document.querySelector(scrollTop)
     if (el) {
-      scrollTop = el.getBoundingClientRect().top + window.pageYOffset
+      const { top } = el.getBoundingClientRect()
+      scrollTop = top + window.pageYOffset
+      // 如果存在，减去 <uni-page-head> 高度
+      const pageHeader = document.querySelector('uni-page-head')
+      if (pageHeader) {
+        scrollTop -= (pageHeader as HTMLElement).offsetHeight
+      }
     }
   }
-  if (scrollTop < 0) {
+  if ((scrollTop as number) < 0) {
     scrollTop = 0
   }
   const documentElement = document.documentElement

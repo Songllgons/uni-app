@@ -1,19 +1,20 @@
 import {
-  VNode,
-  nextTick,
+  type ComponentInternalInstance,
+  type ComponentPublicInstance,
+  type ConcreteComponent,
+  type VNode,
   computed,
-  ConcreteComponent,
-  ComponentPublicInstance,
-  ComponentInternalInstance,
+  nextTick,
+  watch,
 } from 'vue'
-import { useRoute, RouteLocationNormalizedLoaded } from 'vue-router'
+import { type RouteLocationNormalizedLoaded, useRoute } from 'vue-router'
 import {
-  invokeHook,
-  disableScrollListener,
+  type CreateScrollListenerOptions,
   createScrollListener,
-  CreateScrollListenerOptions,
+  disableScrollListener,
   initPageInternalInstance,
   initPageVm,
+  invokeHook,
 } from '@dcloudio/uni-core'
 import {
   ON_PAGE_SCROLL,
@@ -22,13 +23,57 @@ import {
   ON_UNLOAD,
 } from '@dcloudio/uni-shared'
 import { usePageMeta } from './provide'
-import { NavigateType } from '../../service/api/route/utils'
+import {
+  type NavigateOptions,
+  type NavigateType,
+  handleBeforeEntryPageRoutes,
+} from '../../service/api/route/utils'
 import { updateCurPageCssVar } from '../../helpers/cssVar'
 import { getStateId } from '../../helpers/dom'
+//#if _X_ && !_NODE_JS_
+import { closeDialogPage } from '../../x/service/api/route/closeDialogPage'
+//#endif
+//#if _X_
+import { initXPage } from '../../x/framework/setup/page'
+//#endif
 
 const SEP = '$$'
 
-const currentPagesMap = new Map<string, ComponentPublicInstance>()
+export const currentPagesMap = new Map<string, ComponentPublicInstance>()
+
+export function getPage$BasePage(
+  page: ComponentPublicInstance
+): Page.PageInstance['$page'] {
+  return __X__ ? page.$basePage : (page.$page as Page.PageInstance['$page'])
+}
+
+export const entryPageState = {
+  handledBeforeEntryPageRoutes: false,
+}
+type NavigateToPage = {
+  args: NavigateOptions
+  resolve: (res: void | AsyncApiRes<UniNamespace.NavigateToOptions>) => void
+  reject: (errMsg?: string, errRes?: any) => void
+}
+type SwitchTabPage = {
+  args: NavigateOptions
+  resolve: (res: void | AsyncApiRes<UniNamespace.SwitchTabOptions>) => void
+  reject: (errMsg?: string, errRes?: any) => void
+}
+type RedirectToPage = {
+  args: NavigateOptions
+  resolve: (res: void | AsyncApiRes<UniNamespace.RedirectToOptions>) => void
+  reject: (errMsg?: string, errRes?: any) => void
+}
+type ReLaunchPage = {
+  args: NavigateOptions
+  resolve: (res: void | AsyncApiRes<UniNamespace.ReLaunchOptions>) => void
+  reject: (errMsg?: string, errRes?: any) => void
+}
+export const navigateToPagesBeforeEntryPages: NavigateToPage[] = []
+export const switchTabPagesBeforeEntryPages: SwitchTabPage[] = []
+export const redirectToPagesBeforeEntryPages: RedirectToPage[] = []
+export const reLaunchPagesBeforeEntryPages: ReLaunchPage[] = []
 
 function pruneCurrentPages() {
   currentPagesMap.forEach((page, id) => {
@@ -43,10 +88,18 @@ export function getCurrentPagesMap() {
 }
 
 export function getCurrentPages() {
+  const curPages = getCurrentBasePages()
+  if (__X__) {
+    return curPages.map((page) => page.$page)
+  }
+  return curPages
+}
+
+export function getCurrentBasePages() {
   const curPages: ComponentPublicInstance[] = []
   const pages = currentPagesMap.values()
   for (const page of pages) {
-    if (page.__isTabBar) {
+    if (page.$.__isTabBar) {
       if (page.$.__isActive) {
         curPages.push(page)
       }
@@ -67,6 +120,17 @@ function removeRouteCache(routeKey: string) {
 
 export function removePage(routeKey: string, removeRouteCaches = true) {
   const pageVm = currentPagesMap.get(routeKey) as ComponentPublicInstance
+  if (__X__ && !__NODE_JS__) {
+    const dialogPages = (pageVm.$page as UniPage).getDialogPages()
+    for (let i = dialogPages.length - 1; i >= 0; i--) {
+      closeDialogPage({ dialogPage: dialogPages[i] })
+    }
+    const systemDialogPages =
+      pageVm.$pageLayoutInstance?.$systemDialogPages.value
+    if (systemDialogPages) {
+      systemDialogPages.length = 0
+    }
+  }
   pageVm.$.__isUnload = true
   invokeHook(pageVm, ON_UNLOAD)
   currentPagesMap.delete(routeKey)
@@ -82,20 +146,37 @@ export function createPageState(type: NavigateType, __id__?: number) {
   }
 }
 
-function initPublicPage(route: RouteLocationNormalizedLoaded) {
+export function initPublicPage(route: RouteLocationNormalizedLoaded) {
   const meta = usePageMeta()
 
   if (!__UNI_FEATURE_PAGES__) {
     return initPageInternalInstance('navigateTo', __uniRoutes[0].path, {}, meta)
   }
-  return initPageInternalInstance('navigateTo', route.fullPath, {}, meta)
+  let fullPath = route.fullPath
+  if (
+    route.meta.isEntry &&
+    fullPath.indexOf(route.meta.route as string) === -1
+  ) {
+    fullPath = '/' + route.meta.route + fullPath.replace('/', '')
+  }
+  return initPageInternalInstance('navigateTo', fullPath, {}, meta)
 }
 
 export function initPage(vm: ComponentPublicInstance) {
   const route = vm.$route
   const page = initPublicPage(route)
   initPageVm(vm, page)
-  currentPagesMap.set(normalizeRouteKey(page.path, page.id), vm)
+  if (__X__) {
+    initXPage(vm, route, page)
+  } else {
+    currentPagesMap.set(normalizeRouteKey(page.path, page.id), vm)
+    if (currentPagesMap.size === 1) {
+      // 通过异步保证首页生命周期触发
+      setTimeout(() => {
+        handleBeforeEntryPageRoutes()
+      }, 0)
+    }
+  }
 }
 
 export function normalizeRouteKey(path: string, id: number) {
@@ -104,7 +185,9 @@ export function normalizeRouteKey(path: string, id: number) {
 
 export function useKeepAliveRoute() {
   const route = useRoute()
-  const routeKey = computed(() => normalizeRouteKey(route.path, getStateId()))
+  const routeKey = computed(() =>
+    normalizeRouteKey('/' + route.meta.route, getStateId())
+  )
   const isTabBar = computed(() => route.meta.isTabBar)
   return {
     routeKey,
@@ -172,13 +255,19 @@ function pruneRouteCache(key: string) {
 }
 
 function updateCurPageAttrs(pageMeta: UniApp.PageRouteMeta) {
-  const nvueDirKey = 'nvue-dir-' + __uniConfig.nvue!['flex-direction']
-  if (pageMeta.isNVue) {
-    document.body.setAttribute('nvue', '')
-    document.body.setAttribute(nvueDirKey, '')
+  if (__X__) {
+    const uvueDirKey = 'uvue-dir-' + __uniConfig.uvue!['flex-direction']
+    document.body.setAttribute('uvue', '')
+    document.body.setAttribute(uvueDirKey, '')
   } else {
-    document.body.removeAttribute('nvue')
-    document.body.removeAttribute(nvueDirKey)
+    const nvueDirKey = 'nvue-dir-' + __uniConfig.nvue!['flex-direction']
+    if (pageMeta.isNVue) {
+      document.body.setAttribute('nvue', '')
+      document.body.setAttribute(nvueDirKey, '')
+    } else {
+      document.body.removeAttribute('nvue')
+      document.body.removeAttribute(nvueDirKey)
+    }
   }
 }
 
@@ -220,8 +309,8 @@ function updateBodyScopeId(instance: ComponentInternalInstance) {
 }
 
 let curScrollListener: (evt: Event) => any
-// TODO 当动态渲染的组件内监听onPageScroll时
-function initPageScrollListener(
+
+export function initPageScrollListener(
   instance: ComponentInternalInstance,
   pageMeta: UniApp.PageRouteMeta
 ) {
@@ -235,11 +324,15 @@ function initPageScrollListener(
 
   const { onPageScroll, onReachBottom } = instance
   const navigationBarTransparent = pageMeta.navigationBar.type === 'transparent'
-  if (!onPageScroll && !onReachBottom && !navigationBarTransparent) {
+  if (
+    !onPageScroll?.length &&
+    !onReachBottom?.length &&
+    !navigationBarTransparent
+  ) {
     return
   }
   const opts: CreateScrollListenerOptions = {}
-  const pageId = instance.proxy!.$page.id
+  const pageId = getPage$BasePage(instance.proxy!).id
   if (onPageScroll || navigationBarTransparent) {
     opts.onPageScroll = createOnPageScroll(
       pageId,
@@ -247,7 +340,7 @@ function initPageScrollListener(
       navigationBarTransparent
     )
   }
-  if (onReachBottom) {
+  if (onReachBottom?.length) {
     opts.onReachBottomDistance =
       pageMeta.onReachBottomDistance || ON_REACH_BOTTOM_DISTANCE
     opts.onReachBottom = () =>
@@ -258,6 +351,31 @@ function initPageScrollListener(
   requestAnimationFrame(() =>
     document.addEventListener('scroll', curScrollListener)
   )
+
+  if (__X__) {
+    watch(
+      () => pageMeta.onReachBottomDistance,
+      (onReachBottomDistance) => {
+        if (!onReachBottom) {
+          return
+        }
+        opts.onReachBottomDistance =
+          onReachBottomDistance || ON_REACH_BOTTOM_DISTANCE
+        document.removeEventListener('scroll', curScrollListener)
+        curScrollListener = createScrollListener(opts)
+        document.addEventListener('scroll', curScrollListener)
+      }
+    )
+    watch(
+      () => pageMeta.disableScroll,
+      (disableScroll) => {
+        document.removeEventListener('touchmove', disableScrollListener)
+        if (disableScroll) {
+          return document.addEventListener('touchmove', disableScrollListener)
+        }
+      }
+    )
+  }
 }
 
 function createOnPageScroll(

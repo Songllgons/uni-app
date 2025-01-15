@@ -1,11 +1,20 @@
 import plugin from './plugin'
-// @ts-ignore
-import { createVueApp } from '../lib/vue.runtime.esm.js'
+// @ts-expect-error
+import { createVueApp } from 'vue'
 export function createApp(rootComponent: unknown, rootProps = null) {
   rootComponent && ((rootComponent as any).mpType = 'app')
   return createVueApp(rootComponent, rootProps).use(plugin)
 }
-export { vOn } from './helpers/vOn'
 export const createSSRApp = createApp
-// @ts-ignore
-export * from '../lib/vue.runtime.esm.js'
+export * from './helpers'
+// @ts-expect-error
+export * from 'vue'
+// #if _X_
+export { UniElement, UniElement as UniElementImpl } from './dom/UniElement'
+export {
+  pruneUniElements,
+  destroyUniElements,
+  findUniElement,
+  registerCustomElement,
+} from './dom/utils'
+// #endif

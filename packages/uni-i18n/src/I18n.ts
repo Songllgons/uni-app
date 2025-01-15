@@ -59,6 +59,10 @@ export function normalizeLocale(
     return locale as BuiltInLocale
   }
   locale = locale.toLowerCase()
+  if (locale === 'chinese') {
+    // 支付宝
+    return LOCALE_ZH_HANS
+  }
   if (locale.indexOf('zh') === 0) {
     if (locale.indexOf('-hans') > -1) {
       return LOCALE_ZH_HANS
@@ -71,7 +75,11 @@ export function normalizeLocale(
     }
     return LOCALE_ZH_HANS
   }
-  const lang = startsWith(locale, [LOCALE_EN, LOCALE_FR, LOCALE_ES])
+  let locales = [LOCALE_EN, LOCALE_FR, LOCALE_ES]
+  if (messages && Object.keys(messages).length > 0) {
+    locales = Object.keys(messages)
+  }
+  const lang = startsWith(locale, locales)
   if (lang) {
     return lang as BuiltInLocale
   }

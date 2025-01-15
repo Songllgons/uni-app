@@ -1,11 +1,15 @@
 dist
+dist-x
+packages/uni-app-plus/lib
 packages/uni-app-vite/lib
 packages/uni-app-vue/lib
 packages/uni-automator/lib
-packages/uni-cli-nvue/lib
 packages/uni-cli-shared/lib
 packages/uni-components/lib
 packages/uni-cloud/lib
+packages/uni-h5/lib
+packages/uni-stat/lib
+packages/uni-push/lib
 packages/uni-mp-alipay/lib
 packages/uni-mp-baidu/lib
 packages/uni-mp-kuaishou/lib
@@ -15,3 +19,7 @@ packages/uni-mp-vue/lib
 packages/uni-mp-weixin/lib
 packages/uni-mp-quickapp-webview/lib
 packages/vite-plugin-uni/lib
+packages/uni-uts-vite/lib
+packages/uni-cli-shared/src/checkUpdate.ts
+packages/uni-uts-v1/lib
+packages/uni-app-harmony/types

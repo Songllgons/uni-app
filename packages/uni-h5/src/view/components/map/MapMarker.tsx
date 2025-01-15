@@ -1,13 +1,20 @@
 import { onUnmounted, inject, watch } from 'vue'
+import { isFunction } from '@vue/shared'
 import { getRealPath } from '@dcloudio/uni-platform'
 import { defineSystemComponent, useCustomEvent } from '@dcloudio/uni-components'
 import { Maps, Map, LatLng, Callout, CalloutOptions } from './maps'
 import {
-  Map as GMap,
+  MapType,
+  getMapInfo,
+  getIsAMap,
+  getIsBMap,
+} from '../../../helpers/location'
+import {
   LatLng as GLatLng,
   Marker as GMarker,
   Label as GLabel,
   Icon,
+  GoogleMaps,
 } from './maps/google/types'
 import {
   Map as QMap,
@@ -15,6 +22,7 @@ import {
   Marker as QMarker,
   Label as QLabel,
   MarkerImage,
+  QQMaps,
 } from './maps/qq/types'
 
 const props = {
@@ -113,31 +121,97 @@ interface MarkerExt {
 }
 interface GMarkerExt extends GMarker, MarkerExt {}
 interface QMarkerExt extends QMarker, MarkerExt {}
-type Marker = GMarkerExt | QMarkerExt
+interface AMarkerExt extends AMap.Marker, MarkerExt {}
+type Marker = GMarkerExt | QMarkerExt | AMarkerExt
+type MarkerLabelStyle = Partial<
+  Pick<
+    CSSStyleDeclaration,
+    | 'position'
+    | 'top'
+    | 'borderStyle'
+    | 'borderColor'
+    | 'borderWidth'
+    | 'padding'
+    | 'borderRadius'
+    | 'backgroundColor'
+    | 'color'
+    | 'fontSize'
+    | 'lineHeight'
+    | 'marginLeft'
+    | 'marginTop'
+  >
+>
+
+function useMarkerLabelStyle(id: string) {
+  const className = 'uni-map-marker-label-' + id
+  const styleEl = document.createElement('style')
+  styleEl.id = className
+  document.head.appendChild(styleEl)
+  onUnmounted(() => {
+    styleEl.remove()
+  })
+  return function updateMarkerLabelStyle(style: MarkerLabelStyle) {
+    const newStyle: MarkerLabelStyle = Object.assign({}, style, {
+      position: 'absolute',
+      top: '70px',
+      borderStyle: 'solid',
+    })
+    const div = document.createElement('div')
+    Object.keys(newStyle).forEach((key) => {
+      div.style[key as keyof MarkerLabelStyle] =
+        newStyle[key as keyof MarkerLabelStyle] || ''
+    })
+    styleEl.innerText = `.${className}{${div.getAttribute('style')}}`
+    return className
+  }
+}
 
 export default /*#__PURE__*/ defineSystemComponent({
   name: 'MapMarker',
   props,
   setup(props) {
-    const id = String(Number(props.id) !== NaN ? props.id : '')
+    const id = String(!isNaN(Number(props.id)) ? props.id : '')
     const onMapReady: OnMapReady = inject('onMapReady') as OnMapReady
+    const updateMarkerLabelStyle = useMarkerLabelStyle(id)
     let marker: Marker
     function removeMarker() {
       if (marker) {
-        if (marker.label) {
+        if (marker.label && 'setMap' in marker.label) {
           ;(marker.label as QLabel).setMap(null)
         }
         if (marker.callout) {
-          marker.callout.setMap(null)
+          removeMarkerCallout(marker.callout)
         }
         marker.setMap(null)
+      }
+    }
+    function removeMarkerCallout(callout: Marker['callout']) {
+      if (getIsAMap()) {
+        callout!.removeAMapText()
+      } else {
+        callout!.setMap(null)
       }
     }
     onMapReady((map, maps, trigger) => {
       function updateMarker(option: Props) {
         const title = option.title
-        const position = new maps.LatLng(option.latitude, option.longitude)
+        let position: any
+        if (getIsAMap()) {
+          position = new (maps as AMap.NameSpace).LngLat(
+            option.longitude,
+            option.latitude
+          )
+        } else if (getIsBMap()) {
+          // @ts-ignore
+          position = new maps.Point(option.longitude, option.latitude)
+        } else {
+          position = new (maps as QQMaps | GoogleMaps).LatLng(
+            option.latitude,
+            option.longitude
+          )
+        }
         const img = new Image()
+        let imgHeight = 0
         img.onload = () => {
           const anchor = option.anchor || {}
           let icon: MarkerImage | Icon
@@ -153,24 +227,40 @@ export default /*#__PURE__*/ defineSystemComponent({
             w = img.width / 2
             h = img.height / 2
           }
-          top = h - (h - y)
+          imgHeight = h
+          top = h - (h - y * h)
           if ('MarkerImage' in maps) {
             icon = new maps.MarkerImage(
               img.src,
               null,
               null,
-              new maps.Point(x * w, y * h),
-              new maps.Size(w, h)
+              new (maps as QQMaps).Point(x * w, y * h),
+              new (maps as QQMaps).Size(w, h)
             )
+          } else if ('Icon' in maps) {
+            // 高德
+            icon = new (maps as AMap.NameSpace).Icon({
+              image: img.src,
+              size: new (maps as AMap.NameSpace).Size(w, h),
+              imageSize: new (maps as AMap.NameSpace).Size(w, h),
+              imageOffset: new (maps as AMap.NameSpace).Pixel(x * w, y * h),
+            })
           } else {
             icon = {
               url: img.src,
-              anchor: new maps.Point(x, y),
-              size: new maps.Size(w, h),
+              anchor: new (maps as GoogleMaps).Point(x, y),
+              size: new (maps as GoogleMaps).Size(w, h),
             }
           }
-          marker.setPosition(position as any)
-          marker.setIcon(icon as any)
+          if (getIsBMap()) {
+            // @ts-ignore
+            marker = new maps.Marker(new maps.Point(position.lng, position.lat))
+            // @ts-ignore
+            map.addOverlay(marker)
+          } else {
+            marker.setPosition(position as any)
+            marker.setIcon(icon as any)
+          }
           if ('setRotation' in marker) {
             marker.setRotation(option.rotate || 0)
           }
@@ -181,106 +271,189 @@ export default /*#__PURE__*/ defineSystemComponent({
           }
           let label
           if (labelOpt.content) {
+            const labelStyle = {
+              borderColor: labelOpt.borderColor,
+              borderWidth: (Number(labelOpt.borderWidth) || 0) + 'px',
+              padding: (Number(labelOpt.padding) || 0) + 'px',
+              borderRadius: (Number(labelOpt.borderRadius) || 0) + 'px',
+              backgroundColor: labelOpt.bgColor,
+              color: labelOpt.color,
+              fontSize: (labelOpt.fontSize || 14) + 'px',
+              lineHeight: (labelOpt.fontSize || 14) + 'px',
+              marginLeft: (Number(labelOpt.anchorX || labelOpt.x) || 0) + 'px',
+              marginTop: (Number(labelOpt.anchorY || labelOpt.y) || 0) + 'px',
+            }
             if ('Label' in maps) {
               label = new maps.Label({
                 position: position as QLatLng,
                 map: map as QMap,
                 clickable: false,
                 content: labelOpt.content,
-                style: {
-                  border: 'none',
-                  padding: '8px',
-                  background: 'none',
-                  color: labelOpt.color,
-                  fontSize: (labelOpt.fontSize || 14) + 'px',
-                  lineHeight: (labelOpt.fontSize || 14) + 'px',
-                  marginLeft: labelOpt.x,
-                  marginTop: labelOpt.y,
-                },
+                style: labelStyle,
               })
               marker.label = label
             } else if ('setLabel' in marker) {
-              marker.setLabel({
-                text: labelOpt.content,
-                color: labelOpt.color,
-                fontSize: (labelOpt.fontSize || 14) + 'px',
-              })
+              if (getIsAMap()) {
+                const content = `<div style="
+                  margin-left:${labelStyle.marginLeft};
+                  margin-top:${labelStyle.marginTop};
+                  padding:${labelStyle.padding};
+                  background-color:${labelStyle.backgroundColor};
+                  border-radius:${labelStyle.borderRadius};
+                  line-height:${labelStyle.lineHeight};
+                  color:${labelStyle.color};
+                  font-size:${labelStyle.fontSize};
+
+                  ">
+                  ${labelOpt.content}
+                <div>`
+                marker.setLabel({
+                  content,
+                  direction: 'bottom-right',
+                } as any)
+              } else {
+                const className = updateMarkerLabelStyle(labelStyle)
+                ;(marker as GMarker).setLabel({
+                  text: labelOpt.content,
+                  color: labelStyle.color,
+                  fontSize: labelStyle.fontSize,
+                  className,
+                })
+              }
             }
           }
           const calloutOpt = option.callout || {}
           let callout = marker.callout
           let calloutStyle: CalloutOptions
           if (calloutOpt.content || title) {
+            if (getIsAMap() && calloutOpt.content) {
+              calloutOpt.content = calloutOpt.content.replaceAll('\n', '<br/>')
+            }
+            const boxShadow = '0px 0px 3px 1px rgba(0,0,0,0.5)'
+            let offsetY = -imgHeight / 2
+            if (option.width || option.height) {
+              offsetY += 14 - imgHeight / 2
+            }
             calloutStyle = calloutOpt.content
               ? {
                   position,
                   map,
                   top,
+                  // handle AMap callout offset
+                  offsetY,
                   content: calloutOpt.content,
                   color: calloutOpt.color,
                   fontSize: calloutOpt.fontSize,
                   borderRadius: calloutOpt.borderRadius,
                   bgColor: calloutOpt.bgColor,
                   padding: calloutOpt.padding,
-                  boxShadow: calloutOpt.boxShadow,
+                  boxShadow: calloutOpt.boxShadow || boxShadow,
                   display: calloutOpt.display,
                 }
               : {
                   position,
                   map,
                   top,
+                  // handle AMap callout offset
+                  offsetY,
                   content: title,
-                  boxShadow: '0px 0px 3px 1px rgba(0,0,0,0.5)',
+                  boxShadow,
                 }
             if (callout) {
               callout.setOption(calloutStyle)
             } else {
-              callout = marker.callout = new maps.Callout(calloutStyle)
-              callout.div.onclick = function ($event) {
-                if (id !== '') {
-                  trigger('callouttap', $event, {
-                    markerId: Number(id),
-                  })
+              if (getIsAMap()) {
+                const callback = () => {
+                  if (id !== '') {
+                    trigger('callouttap', {} as Event, {
+                      markerId: Number(id),
+                    })
+                  }
                 }
-                $event.stopPropagation()
-                $event.preventDefault()
+                callout = marker.callout = new maps.Callout(
+                  calloutStyle,
+                  callback
+                )
+              } else {
+                callout = marker.callout = new maps.Callout(calloutStyle)
+                callout.div!.onclick = function ($event: Event) {
+                  if (id !== '') {
+                    trigger('callouttap', $event, {
+                      markerId: Number(id),
+                    })
+                  }
+                  $event.stopPropagation()
+                  $event.preventDefault()
+                }
+
+                // The mobile terminal prevent google map callout click trigger map click
+                if (getMapInfo().type === MapType.GOOGLE) {
+                  callout.div!.ontouchstart = function ($event: Event) {
+                    $event.stopPropagation()
+                  }
+                  callout.div!.onpointerdown = function ($event: Event) {
+                    $event.stopPropagation()
+                  }
+                }
               }
             }
           } else {
             if (callout) {
-              callout.setMap(null)
+              removeMarkerCallout(callout)
               delete marker.callout
             }
           }
         }
-        img.src = getRealPath(option.iconPath)
+        if (option.iconPath) {
+          img.src = getRealPath(option.iconPath)
+        } else {
+          console.error('Marker.iconPath is required.')
+        }
       }
       function addMarker(props: Props) {
-        marker = new maps.Marker({
-          map: map as GMap & QMap,
-          flat: true,
-          autoRotation: false,
-        })
+        if (!getIsBMap()) {
+          marker = new maps.Marker({
+            map: map as any,
+            flat: true,
+            autoRotation: false,
+          })
+        }
         updateMarker(props)
-        maps.event.addListener(marker, 'click', () => {
-          const callout = marker.callout
-          if (callout) {
-            const div = callout.div
-            const parent = div.parentNode as HTMLElement
-            if (!callout.alwaysVisible) {
-              callout.set('visible', !callout.visible)
+        const MapsEvent =
+          (maps as QQMaps | GoogleMaps).event || (maps as AMap.NameSpace).Event
+        if (getIsBMap()) {
+          // todo add bmap event
+        } else {
+          MapsEvent.addListener(marker, 'click', () => {
+            const callout = marker.callout
+            if (callout && !callout.alwaysVisible) {
+              if (getIsAMap()) {
+                callout.visible = !callout.visible
+                if (callout.visible) {
+                  marker.callout!.createAMapText()
+                } else {
+                  marker.callout!.removeAMapText()
+                }
+              } else {
+                callout.set('visible', !callout.visible)
+                if (callout.visible) {
+                  const div = callout.div!
+                  const parent = div.parentNode!
+                  parent.removeChild(div)
+                  parent.appendChild(div)
+                }
+              }
             }
-            if (callout.visible) {
-              parent.removeChild(div)
-              parent.appendChild(div)
+
+            if (id) {
+              trigger('markertap', {} as Event, {
+                markerId: Number(id),
+                latitude: props.latitude,
+                longitude: props.longitude,
+              })
             }
-          }
-          if (id) {
-            trigger('markertap', {} as Event, {
-              markerId: Number(id),
-            })
-          }
-        })
+          })
+        }
       }
       addMarker(props as Props)
       watch(props, updateMarker)
@@ -305,20 +478,23 @@ export default /*#__PURE__*/ defineSystemComponent({
               rotation = marker.getRotation()
             }
             const a = marker.getPosition()
-            const b = new maps.LatLng(
+            const b = new (maps as QQMaps | GoogleMaps).LatLng(
               destination.latitude,
               destination.longitude
             )
             const distance =
-              maps.geometry.spherical.computeDistanceBetween(
-                a as any,
-                b as any
-              ) / 1000
+              (
+                maps as QQMaps | GoogleMaps
+              ).geometry.spherical.computeDistanceBetween(a as any, b as any) /
+              1000
             const time =
               (typeof duration === 'number' ? duration : 1000) /
               (1000 * 60 * 60)
             const speed = distance / time
-            const movingEvent = maps.event.addListener(
+            const MapsEvent =
+              (maps as QQMaps | GoogleMaps).event ||
+              (maps as AMap.NameSpace).Event
+            const movingEvent = MapsEvent.addListener(
               marker,
               'moving',
               (e: any) => {
@@ -333,10 +509,10 @@ export default /*#__PURE__*/ defineSystemComponent({
                 }
               }
             )
-            const event = maps.event.addListener(marker, 'moveend', () => {
+            const event = MapsEvent.addListener(marker, 'moveend', () => {
               event.remove()
               movingEvent.remove()
-              marker.lastPosition = a!
+              marker.lastPosition = a as QLatLng
               marker.setPosition(b as any)
               const label = marker.label
               if (label) {
@@ -347,21 +523,25 @@ export default /*#__PURE__*/ defineSystemComponent({
                 callout.setPosition(b)
               }
               const cb = data.animationEnd
-              if (typeof cb === 'function') {
+              if (isFunction(cb)) {
                 cb()
               }
             })
             let lastRtate = 0
             if (autoRotate) {
               if (marker.lastPosition) {
-                lastRtate = maps.geometry.spherical.computeHeading(
+                lastRtate = (
+                  maps as QQMaps | GoogleMaps
+                ).geometry.spherical.computeHeading(
                   marker.lastPosition as any,
                   a as any
                 )
               }
               rotate =
-                maps.geometry.spherical.computeHeading(a as any, b as any) -
-                lastRtate
+                (maps as QQMaps | GoogleMaps).geometry.spherical.computeHeading(
+                  a as any,
+                  b as any
+                ) - lastRtate
             }
             if ('setRotation' in marker) {
               marker.setRotation(rotation + rotate)
@@ -370,7 +550,7 @@ export default /*#__PURE__*/ defineSystemComponent({
               marker.moveTo(b as QLatLng, speed)
             } else {
               marker.setPosition(b as GLatLng)
-              maps.event.trigger(marker, 'moveend', {})
+              MapsEvent.trigger(marker, 'moveend', {})
             }
           })
         },

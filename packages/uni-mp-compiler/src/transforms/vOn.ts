@@ -1,24 +1,29 @@
+import { isDirectiveNode } from '@dcloudio/uni-cli-shared'
 import {
+  type DirectiveNode,
+  type DirectiveTransform,
+  type ElementNode,
+  ElementTypes,
+  ErrorCodes,
+  type ExpressionNode,
+  NodeTypes,
+  type SimpleExpressionNode,
+  TO_HANDLER_KEY,
   createCompilerError,
   createCompoundExpression,
   createObjectProperty,
   createSimpleExpression,
-  DirectiveNode,
-  ElementTypes,
-  ErrorCodes,
-  ExpressionNode,
+  findProp,
   hasScopeRef,
   isMemberExpression,
-  NodeTypes,
-  SimpleExpressionNode,
-  TO_HANDLER_KEY,
 } from '@vue/compiler-core'
 import { camelize, toHandlerKey } from '@vue/shared'
-import { V_ON } from '..'
-import { errorMessages, X_V_ON_DYNAMIC_EVENT } from '../errors'
-import { DirectiveTransform, TransformContext } from '../transform'
-import { DirectiveTransformResult } from './transformElement'
-import { processExpression } from './transformExpression'
+import { genExpr } from '..'
+import { V_ON } from '../runtimeHelpers'
+import type { TransformContext } from '../transform'
+import type { DirectiveTransformResult } from './transformElement'
+import { isBuiltInIdentifier, processExpression } from './transformExpression'
+import { parseVForScope } from './vFor'
 
 const fnExpRE =
   /^\s*([\w$_]+|(async\s*)?\([^)]*?\))\s*=>|^\s*(async\s+)?function(?:\s+[\w$]+)?\s*\(/
@@ -36,9 +41,10 @@ export interface VOnDirectiveNode extends DirectiveNode {
 export const transformOn: DirectiveTransform = (
   dir,
   node,
-  context,
+  _context,
   augmentor
 ) => {
+  const context = _context as unknown as TransformContext
   const { loc, modifiers, arg } = dir as VOnDirectiveNode
   if (!dir.exp && !modifiers.length) {
     context.onError(createCompilerError(ErrorCodes.X_V_ON_NO_EXPRESSION, loc))
@@ -54,10 +60,6 @@ export const transformOn: DirectiveTransform = (
         arg.loc
       )
     } else {
-      // TODO 不支持动态事件
-      context.onError(
-        createCompilerError(X_V_ON_DYNAMIC_EVENT, loc, errorMessages)
-      )
       // #2388
       eventName = createCompoundExpression([
         // `${context.helperString(TO_HANDLER_KEY)}(`,
@@ -112,7 +114,9 @@ export const transformOn: DirectiveTransform = (
         !(isMemberExp && node.tagType === ElementTypes.COMPONENT) &&
         // bail if the function references closure variables (v-for, v-slot)
         // it must be passed fresh to avoid stale values.
-        !hasScopeRef(exp, context.identifiers)
+        !hasScopeRef(exp, context.identifiers) &&
+        // wxs event
+        !isFilterExpr(exp, context)
       // If the expression is optimizable and is a member expression pointing
       // to a function, turn it into invocation (and wrap in an arrow function
       // below) so that it always accesses the latest value when called - thus
@@ -164,9 +168,17 @@ export const transformOn: DirectiveTransform = (
     //   context.cache(ret.props[0].value) as ExpressionNode,
     //   context
     // )
-    ret.props[0].value = wrapper(ret.props[0].value as ExpressionNode, context)
+    ret.props[0].value = wrapperVOn(
+      ret.props[0].value as ExpressionNode,
+      node,
+      context
+    )
   } else {
-    ret.props[0].value = wrapper(ret.props[0].value as ExpressionNode, context)
+    ret.props[0].value = wrapperVOn(
+      ret.props[0].value as ExpressionNode,
+      node,
+      context
+    )
   }
 
   // mark the key as handler for props normalization check
@@ -174,10 +186,53 @@ export const transformOn: DirectiveTransform = (
   return ret
 }
 
-function wrapper(value: ExpressionNode, context: TransformContext) {
+function isFilterExpr(value: ExpressionNode, context: TransformContext) {
+  if (context.filters.length && value.type === NodeTypes.COMPOUND_EXPRESSION) {
+    const firstChild = value.children[0] as ExpressionNode
+    if (
+      firstChild.type === NodeTypes.SIMPLE_EXPRESSION &&
+      context.filters.includes(firstChild.content)
+    ) {
+      return true
+    }
+  }
+  return false
+}
+
+export function wrapperVOn(
+  value: ExpressionNode,
+  node: ElementNode,
+  context: TransformContext
+) {
+  if (isBuiltInIdentifier(value)) {
+    return value
+  }
+  // wxs event
+  if (isFilterExpr(value, context)) {
+    return value
+  }
+  const keys: string[] = []
+  if (context.miniProgram.event?.key && context.inVFor) {
+    let keyProp = findProp(node, 'key')
+    if (!keyProp) {
+      const vForScope = parseVForScope(context.currentScope)
+      if (vForScope) {
+        keyProp = findProp(vForScope.node, 'key')
+      }
+    }
+    // 对 for 中的所有事件增加 key 标记，避免微信小程序不更新事件对象
+    if (keyProp && isDirectiveNode(keyProp) && keyProp.exp) {
+      const keyCode = genExpr(keyProp.exp)
+      if (keyCode) {
+        keys.push(',')
+        keys.push(genExpr(keyProp.exp))
+      }
+    }
+  }
   return createCompoundExpression([
     `${context.helperString(V_ON)}(`,
     value,
+    ...keys,
     `)`,
   ])
 }

@@ -1,4 +1,11 @@
-import { ref, watch, onBeforeUnmount, Ref, computed } from 'vue'
+import {
+  ref,
+  watch,
+  onBeforeUnmount,
+  Ref,
+  computed,
+  ExtractPropTypes,
+} from 'vue'
 import { extend } from '@vue/shared'
 import { defineBuiltInComponent } from '@dcloudio/uni-components'
 import { getCurrentPageId } from '@dcloudio/uni-core'
@@ -17,6 +24,10 @@ const props = {
     type: String,
     default: '',
   },
+  updateTitle: {
+    type: Boolean,
+    default: true,
+  },
   webviewStyles: {
     type: Object,
     default() {
@@ -24,27 +35,36 @@ const props = {
     },
   },
 }
+type Props = ExtractPropTypes<typeof props>
 
 let webview: PlusWebviewWebviewObject | null
 
+interface insertHTMLWebView {
+  htmlId: string
+  src: string
+  webviewStyles: PlusWebviewWebviewStyles
+  props: Props
+}
 const insertHTMLWebView = ({
   htmlId,
   src,
   webviewStyles,
-}: {
-  htmlId: string
-  src: string
-  webviewStyles: PlusWebviewWebviewStyles
-}) => {
+  props,
+}: insertHTMLWebView) => {
   const parentWebview = plus.webview.currentWebview()
   // fixed by hxy web-view 组件所在的 webview 不注入 uni-app 框架
   const styles: PlusWebviewWebviewStyles & {
     'uni-app': string
     isUniH5: boolean
-  } = extend(webviewStyles, {
-    'uni-app': 'none',
-    isUniH5: true,
-  })
+  } = extend(
+    {
+      'uni-app': 'none',
+      isUniH5: true,
+      // ios 默认绘制到安全区外
+      contentAdjust: false,
+    },
+    webviewStyles
+  )
   const parentTitleNView = parentWebview.getTitleNView()
   if (parentTitleNView) {
     let defaultTop: number = NAVBAR_HEIGHT + parseFloat(styles.top || '0')
@@ -57,6 +77,7 @@ const insertHTMLWebView = ({
   webview = plus.webview.create(src, htmlId, styles)
   if (parentTitleNView) {
     webview.addEventListener('titleUpdate', function () {
+      if (!props.updateTitle) return
       const title = webview?.getTitle()
       parentWebview.setStyle({
         titleNView: {
@@ -91,6 +112,7 @@ export default /*#__PURE__*/ defineBuiltInComponent({
         htmlId: htmlId.value,
         src: getRealPath(props.src),
         webviewStyles: webviewStyles.value,
+        props,
       })
       UniViewJSBridge.publishHandler(WEBVIEW_INSERTED, {}, pageId)
       if (hidden.value) webview?.hide()

@@ -1,6 +1,11 @@
-import { isString } from '@vue/shared'
-import { getEnvLocale, I18N_JSON_DELIMITERS } from '@dcloudio/uni-shared'
-import { BuiltInLocale, initVueI18n, isI18nStr } from '@dcloudio/uni-i18n'
+import { isArray, isString } from '@vue/shared'
+import {
+  I18N_JSON_DELIMITERS,
+  UNI_STORAGE_LOCALE,
+  getEnvLocale,
+} from '@dcloudio/uni-shared'
+import { type BuiltInLocale, initVueI18n, isI18nStr } from '@dcloudio/uni-i18n'
+import { isEnableLocale } from './utils'
 
 let i18n: ReturnType<typeof initVueI18n>
 
@@ -26,11 +31,22 @@ export function formatI18n(message: string) {
 function resolveJsonObj(
   jsonObj: Record<string, any> | undefined,
   names: string[]
-): Record<string, any> | undefined {
+): Record<string, any> | Array<Record<string, any>> | undefined {
   if (names.length === 1) {
     if (jsonObj) {
-      const value = jsonObj[names[0]]
-      if (isString(value) && isI18nStr(value, I18N_JSON_DELIMITERS)) {
+      const _isI18nStr = (value: any) =>
+        isString(value) && isI18nStr(value, I18N_JSON_DELIMITERS)
+      const _name = names[0]
+      let filterJsonObj: Array<Record<string, any>> = []
+      if (
+        isArray(jsonObj) &&
+        (filterJsonObj = jsonObj.filter((item) => _isI18nStr(item[_name])))
+          .length
+      ) {
+        return filterJsonObj
+      }
+      const value = (jsonObj as Record<string, any>)[names[0]]
+      if (_isI18nStr(value)) {
         return jsonObj
       }
     }
@@ -53,15 +69,19 @@ export function defineI18nProperty(obj: Record<string, any>, names: string[]) {
     return false
   }
   const prop = names[names.length - 1]
-  let value = jsonObj[prop]
-  Object.defineProperty(jsonObj, prop, {
-    get() {
-      return formatI18n(value)
-    },
-    set(v) {
-      value = v
-    },
-  })
+  if (isArray(jsonObj)) {
+    jsonObj.forEach((item) => defineI18nProperty(item, [prop]))
+  } else {
+    let value = jsonObj[prop]
+    Object.defineProperty(jsonObj, prop, {
+      get() {
+        return formatI18n(value)
+      },
+      set(v) {
+        value = v
+      },
+    })
+  }
   return true
 }
 
@@ -72,7 +92,11 @@ export function useI18n() {
       if (__NODE_JS__) {
         locale = getEnvLocale() as BuiltInLocale
       } else {
-        locale = (__uniConfig.locale || navigator.language) as BuiltInLocale
+        locale = ((navigator.cookieEnabled &&
+          window.localStorage &&
+          localStorage[UNI_STORAGE_LOCALE]) ||
+          __uniConfig.locale ||
+          navigator.language) as BuiltInLocale
       }
     } else if (__PLATFORM__ === 'app') {
       if (typeof getApp === 'function') {
@@ -86,6 +110,18 @@ export function useI18n() {
       locale = uni.getSystemInfoSync().language as BuiltInLocale
     }
     i18n = initVueI18n(locale)
+
+    // 自定义locales
+    if (isEnableLocale()) {
+      const localeKeys = Object.keys(__uniConfig.locales || {})
+      if (localeKeys.length) {
+        localeKeys.forEach((locale) =>
+          i18n.add(locale as BuiltInLocale, __uniConfig.locales[locale])
+        )
+      }
+      // initVueI18n 时 messages 还没有，导致用户自定义 locale 可能不生效，当设置完 messages 后，重新设置 locale
+      i18n.setLocale(locale)
+    }
   }
   return i18n
 }

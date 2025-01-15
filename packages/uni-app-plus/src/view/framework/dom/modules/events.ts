@@ -1,15 +1,17 @@
 import { withModifiers } from 'vue'
 import { normalizeNativeEvent } from '@dcloudio/uni-core'
 import {
-  parseEventName,
-  formatLog,
-  EventModifierFlags,
-  normalizeEventType,
   ACTION_TYPE_EVENT,
+  EventModifierFlags,
+  formatLog,
+  normalizeEventType,
+  parseEventName,
 } from '@dcloudio/uni-shared'
 import { VD_SYNC } from '../../../../constants'
-import { UniCustomElement } from '../components'
+import type { UniCustomElement } from '../components'
 import { invokeWxsEvent } from '../wxs'
+import type { UniComponent } from '../components/UniComponent'
+import { isUniComponent } from '../utils'
 
 function removeEventListener(el: UniCustomElement, type: string) {
   const listener = el.__listeners[type]
@@ -48,7 +50,7 @@ export function patchEvent(el: UniCustomElement, name: string, flag: number) {
     if (!isEventListenerExists(el, type)) {
       el.addEventListener(
         type,
-        (el.__listeners[type] = createInvoker(el.__id, flag, options)),
+        (el.__listeners[type] = createInvoker(el.__id!, flag, options)),
         options
       )
     }
@@ -108,13 +110,13 @@ export function patchWxsEvent(
 }
 
 export function createWxsEventInvoker(
-  el: UniCustomElement,
+  el: UniCustomElement | UniComponent,
   wxsEvent: string,
   flag: number
 ) {
   const invoker = (evt: Event) => {
     invokeWxsEvent(
-      el,
+      isUniComponent(el) ? el.$ : el,
       wxsEvent,
       normalizeNativeEvent(evt)[0] as Record<string, any>
     )

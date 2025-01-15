@@ -1,9 +1,9 @@
-import { getPageIdByVm, getCurrentPageVm } from '@dcloudio/uni-core'
+import { getCurrentPageVm, getPageIdByVm } from '@dcloudio/uni-core'
 import { operateMap } from '@dcloudio/uni-platform'
 import { defineSyncApi } from '../../helpers/api'
 import {
   API_CREATE_MAP_CONTEXT,
-  API_TYPE_CREATE_MAP_CONTEXT,
+  type API_TYPE_CREATE_MAP_CONTEXT,
   CreateMapContextProtocol,
 } from '../../protocols/context/context'
 
@@ -61,19 +61,45 @@ export class MapContext implements UniApp.MapContext {
       return plus.maps.getMapById(this.pageId + '-map-' + this.id)
     }
   }
-  addCustomLayer() {}
-  removeCustomLayer() {}
-  addGroundOverlay() {}
-  removeGroundOverlay() {}
-  updateGroundOverlay() {}
-  initMarkerCluster() {}
-  addMarkers() {}
-  removeMarkers() {}
-  moveAlong() {}
-  openMapApp() {}
+  addCustomLayer(options: any) {
+    operateMapWrap(this.id, this.pageId, 'addCustomLayer', options)
+  }
+  removeCustomLayer(options: any) {
+    operateMapWrap(this.id, this.pageId, 'removeCustomLayer', options)
+  }
+  addGroundOverlay(options: any) {
+    operateMapWrap(this.id, this.pageId, 'addGroundOverlay', options)
+  }
+  removeGroundOverlay(options: any) {
+    operateMapWrap(this.id, this.pageId, 'removeGroundOverlay', options)
+  }
+  updateGroundOverlay(options: any) {
+    operateMapWrap(this.id, this.pageId, 'updateGroundOverlay', options)
+  }
+  initMarkerCluster(options: any) {
+    operateMapWrap(this.id, this.pageId, 'initMarkerCluster', options)
+  }
+  addMarkers(options: any) {
+    operateMapWrap(this.id, this.pageId, 'addMarkers', options)
+  }
+  removeMarkers(options: any) {
+    operateMapWrap(this.id, this.pageId, 'removeMarkers', options)
+  }
+  moveAlong(options: any) {
+    operateMapWrap(this.id, this.pageId, 'moveAlong', options)
+  }
+  setLocMarkerIcon(options: any) {
+    operateMapWrap(this.id, this.pageId, 'setLocMarkerIcon', options)
+  }
+  openMapApp(options: any) {
+    operateMapWrap(this.id, this.pageId, 'openMapApp', options)
+  }
+  on(name: string, callback: (...args: any[]) => void) {
+    operateMapWrap(this.id, this.pageId, 'on', { name, callback })
+  }
 }
 
-export const createMapContext = <API_TYPE_CREATE_MAP_CONTEXT>defineSyncApi(
+export const createMapContext = defineSyncApi<API_TYPE_CREATE_MAP_CONTEXT>(
   API_CREATE_MAP_CONTEXT,
   (id, context) => {
     if (context) {

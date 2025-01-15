@@ -1,12 +1,13 @@
-import { ComponentPublicInstance } from 'vue'
+import type { ComponentPublicInstance } from 'vue'
 import { extend, isFunction } from '@vue/shared'
+import { resolveComponentInstance } from '@dcloudio/uni-shared'
 import { getCurrentPageVm, getPageIdByVm } from '@dcloudio/uni-core'
 import {
   addIntersectionObserver,
   removeIntersectionObserver,
 } from '@dcloudio/uni-platform'
 import { defineSyncApi } from '../../helpers/api'
-import { RequestComponentObserverOptions } from '../../helpers/requestComponentObserver'
+import type { RequestComponentObserverOptions } from '../../helpers/requestComponentObserver'
 
 export interface AddIntersectionObserverArgs {
   reqId: number
@@ -96,6 +97,7 @@ class ServiceIntersectionObserver {
 export const createIntersectionObserver = defineSyncApi<
   typeof uni.createIntersectionObserver
 >('createIntersectionObserver', (context?, options?) => {
+  context = resolveComponentInstance(context)
   if (context && !getPageIdByVm(context)) {
     options = context
     context = null

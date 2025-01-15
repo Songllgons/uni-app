@@ -1,45 +1,61 @@
 import fs from 'fs-extra'
 import path from 'path'
-import { FSWatcher, watch, WatchOptions } from 'chokidar'
+import debug from 'debug'
+import { type FSWatcher, type WatchOptions, watch } from 'chokidar'
+import { isArray } from '@vue/shared'
+import { pathToGlob } from './utils'
 type FileTransform = (source: Buffer, filename: string) => void | string
 export interface FileWatcherOptions {
   src: string | string[]
   dest: string
   transform?: FileTransform
-  verbose?: boolean
 }
+
+const debugWatcher = debug('uni:watcher')
 export class FileWatcher {
   private src: string[]
   private dest: string
   private transform?: FileTransform
-  private verbose?: boolean
   private watcher!: FSWatcher
   private onChange?: () => void
-  constructor({ src, dest, transform, verbose }: FileWatcherOptions) {
-    this.src = !Array.isArray(src) ? [src] : src
+  constructor({ src, dest, transform }: FileWatcherOptions) {
+    this.src = !isArray(src) ? [src] : src
     this.dest = dest
     this.transform = transform
-    this.verbose = verbose
   }
   watch(
-    watchOptions: WatchOptions & { cwd: string },
+    watchOptions: WatchOptions & { cwd: string; readyTimeout?: number },
     onReady?: (watcher: FSWatcher) => void,
     onChange?: () => void
   ) {
     if (!this.watcher) {
       const copy = this.copy.bind(this)
       const remove = this.remove.bind(this)
-      this.watcher = watch(this.src, watchOptions)
+      // escape chokidar cwd
+      const src = this.src.map((src) =>
+        pathToGlob(path.resolve(watchOptions.cwd), src)
+      )
+      let closeTimer: any
+      const checkReady = () => {
+        if (closeTimer) {
+          clearTimeout(closeTimer)
+        }
+        closeTimer = setTimeout(() => {
+          onReady && onReady(this.watcher)
+          // 等首次change完，触发完ready，在切换到真实的onChange
+          this.onChange = onChange
+        }, watchOptions.readyTimeout || 1000) // 300ms 在部分机器上仍有问题，调整成1000ms
+      }
+
+      this.onChange = checkReady
+      this.watcher = watch(src, watchOptions)
         .on('add', copy)
-        .on('addDir', copy)
+        // .on('addDir', copy)
         .on('change', copy)
         .on('unlink', remove)
-        .on('unlinkDir', remove)
+        // .on('unlinkDir', remove)
         .on('ready', () => {
-          onReady && onReady(this.watcher)
-          setTimeout(() => {
-            this.onChange = onChange
-          }, 1000)
+          checkReady()
         })
         .on('error', (e) => console.error('watch', e))
     }
@@ -60,41 +76,42 @@ export class FileWatcher {
   copy(from: string) {
     const to = this.to(from)
     this.info('copy', from + '=>' + to)
-    let content: string | void
+    let content: string | void = ''
     if (this.transform) {
       const filename = this.from(from)
       content = this.transform(fs.readFileSync(filename), filename)
     }
     if (content) {
-      return fs
-        .outputFile(to, content)
-        .catch((e) => {
-          // this.info('copy', e)
-        })
-        .then(() => this.onChange && this.onChange())
+      try {
+        fs.outputFileSync(to, content)
+      } catch (e) {
+        // noop
+      }
+      this.onChange && this.onChange()
+      return
     }
-    return fs
-      .copy(this.from(from), to, { overwrite: true })
-      .catch((e) => {
-        // this.info('copy', e)
-      })
-      .then(() => this.onChange && this.onChange())
+    try {
+      fs.copySync(this.from(from), to, { overwrite: true })
+    } catch (e) {
+      // noop
+    }
+    this.onChange && this.onChange()
   }
   remove(from: string) {
     const to = this.to(from)
     this.info('remove', from + '=>' + to)
-    return fs
-      .remove(to)
-      .catch((e) => {
-        // this.info('remove', e)
-      })
-      .then(() => this.onChange && this.onChange())
+    try {
+      fs.removeSync(to)
+    } catch (e) {
+      // noop
+    }
+    this.onChange && this.onChange()
   }
   info(
     type: 'close' | 'copy' | 'remove' | 'add' | 'unwatch',
     msg?: string | unknown
   ) {
-    this.verbose && console.log(type, msg)
+    debugWatcher.enabled && debugWatcher(type, msg)
   }
   from(from: string) {
     return path.join(this.watcher.options.cwd!, from)

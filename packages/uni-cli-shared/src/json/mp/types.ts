@@ -1,6 +1,9 @@
 export interface ComponentJson {
   component: true
   usingComponents?: UsingComponents
+  usingSwanComponents?: UsingComponents // 百度小程序特有
+  // mp-alipay
+  styleIsolation?: 'apply-shared' | 'shared' | 'isolated'
 }
 
 interface ShareWindowOptions {
@@ -21,8 +24,10 @@ type Style = 'v2' | string
 type RestartStrategy = 'homePage' | 'homePageAndLatestPage' | string
 
 export interface PageWindowOptions extends ShareWindowOptions {
+  component?: true // 百度小程序页面必须配置component: true
   disableScroll?: boolean // false
   usingComponents?: UsingComponents
+  usingSwanComponents?: UsingComponents // 百度小程序特有
   initialRenderingCache?: 'static' | string
   style?: Style
   singlePage?: SinglePage
@@ -124,4 +129,12 @@ export interface AppJson {
   lazyCodeLoading?: 'requiredComponents' | string
   singlePage?: SinglePage
   restartStrategy?: RestartStrategy
+  [name: string]: unknown
 }
+
+export type MiniProgramComponentsType =
+  | 'plugin'
+  | 'component'
+  | 'dynamicLib'
+  | 'ext'
+  | 'xr-frame'

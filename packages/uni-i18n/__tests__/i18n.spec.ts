@@ -1,4 +1,4 @@
-import { BuiltInLocale } from '../src/index'
+import type { BuiltInLocale } from '../src/index'
 import { I18n } from '../src/index'
 
 const messages = {
@@ -47,6 +47,7 @@ const locales: {
   es: 'es',
   'es-AR': 'es',
   'sv-se': 'en', //fallback
+  'ja-CN': 'en', //fallback
 }
 
 describe('i18n', () => {

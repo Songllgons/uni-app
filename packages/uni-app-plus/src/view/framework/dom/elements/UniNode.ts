@@ -1,11 +1,12 @@
 import { hasOwn } from '@vue/shared'
-import { ATTR_CHANGE_PREFIX, UniNodeJSON } from '@dcloudio/uni-shared'
+import { ATTR_CHANGE_PREFIX, type UniNodeJSON } from '@dcloudio/uni-shared'
 
-import { $, removeElement } from '../page'
+import { $, getElement, removeElement } from '../store'
 import { JOB_PRIORITY_WXS_PROPS, queuePostActionJob } from '../scheduler'
-import { createWxsPropsInvoker, WxsPropsInvoker } from '../wxs'
+import { type WxsPropsInvoker, createWxsPropsInvoker } from '../wxs'
 import { destroyRenderjs } from '../renderjs'
 import { nextTick } from 'vue'
+import { decodeAttr } from '../utils'
 
 export class UniNode {
   id: number
@@ -16,6 +17,8 @@ export class UniNode {
   isUnmounted: boolean = false
   $wxsProps: Map<string, WxsPropsInvoker>
   $hasWxsProps: boolean = false
+  $parent: UniNode | undefined
+  $children: UniNode[] = []
   constructor(
     id: number,
     tag: string,
@@ -29,16 +32,29 @@ export class UniNode {
       this.$ = element
     }
     this.$wxsProps = new Map<string, WxsPropsInvoker>()
+    const parent = (this.$parent = getElement(parentNodeId))
+    if (parent) {
+      parent.appendUniChild(this)
+    }
   }
-  init(nodeJson: Partial<UniNodeJSON>) {
+  init(nodeJson: Partial<UniNodeJSON>, isCreate: boolean = true) {
     if (hasOwn(nodeJson, 't')) {
       this.$.textContent = nodeJson.t as string
     }
   }
   setText(text: string) {
     this.$.textContent = text
+    this.updateView()
   }
-  insert(parentNodeId: number, refNodeId: number) {
+  insert(
+    parentNodeId: number,
+    refNodeId: number,
+    nodeJson?: Partial<UniNodeJSON>
+  ) {
+    // 部分性能低的手机，create 和 insert 是分开的，而 nodeJson 可能随着 insert
+    if (nodeJson) {
+      this.init(nodeJson, false)
+    }
     const node = this.$
     const parentNode = $(parentNodeId)
     if (refNodeId === -1) {
@@ -49,23 +65,50 @@ export class UniNode {
     this.isMounted = true
   }
   remove() {
+    this.removeUniParent()
     const { $ } = this
     $.parentNode!.removeChild($)
     this.isUnmounted = true
     removeElement(this.id)
     destroyRenderjs(this)
+    this.removeUniChildren()
+    this.updateView()
   }
   appendChild(node: Node) {
-    return this.$.appendChild(node)
+    const ref = this.$.appendChild(node)
+    this.updateView(true)
+    return ref
   }
   insertBefore(newChild: Node, refChild: Node) {
-    return this.$.insertBefore(newChild, refChild)
+    const ref = this.$.insertBefore(newChild, refChild)
+    this.updateView(true)
+    return ref
+  }
+  appendUniChild(node: UniNode) {
+    this.$children.push(node)
+  }
+  removeUniChild(node: UniNode) {
+    const index = this.$children.indexOf(node)
+    if (index >= 0) {
+      this.$children.splice(index, 1)
+    }
+  }
+  removeUniParent() {
+    const { $parent } = this
+    if ($parent) {
+      $parent.removeUniChild(this)
+      this.$parent = undefined
+    }
+  }
+  removeUniChildren() {
+    this.$children.forEach((node) => node.remove())
+    this.$children.length = 0
   }
   setWxsProps(attrs: Record<string, any>) {
     Object.keys(attrs).forEach((name) => {
       if (name.indexOf(ATTR_CHANGE_PREFIX) === 0) {
         const propName = name.replace(ATTR_CHANGE_PREFIX, '')
-        const value = attrs[propName]
+        const value = decodeAttr(attrs[propName])
         const invoker = createWxsPropsInvoker(this, attrs[name], value)
         // 队列后再执行
         queuePostActionJob(() => invoker(value), JOB_PRIORITY_WXS_PROPS)
@@ -99,6 +142,12 @@ export class UniNode {
         ),
         true
       )
+    }
+  }
+  updateView(isMounted?: boolean) {
+    // 通知原生组件更新位置
+    if (this.isMounted || isMounted) {
+      window.dispatchEvent(new CustomEvent('updateview'))
     }
   }
 }

@@ -1,3 +1,12 @@
+// 临时覆盖 HBuilderX.PageURIString , HBuilderX.ColorString
+declare namespace HBuilderX {
+  type PageURIString = string
+  type ColorString = string
+}
+declare namespace string {
+  type PageURIString = string
+  type ColorString = string
+}
 declare namespace Page {
   interface PageInstance {
     $page: {
@@ -13,10 +22,11 @@ declare namespace Page {
     }
   }
 }
-declare namespace UniApp {
+declare namespace UniNamespace {
   type ClassObj = Record<string, boolean>
   type StyleObj = Record<string, any>
   type PLATFORM = keyof PagesJsonPagePlatformStyle
+  type ThemeMode = 'light' | 'dark'
 
   type OpenType =
     | 'navigateTo'
@@ -25,6 +35,9 @@ declare namespace UniApp {
     | 'switchTab'
     | 'navigateBack'
     | 'preloadPage'
+    | 'launch'
+    | 'openDialogPage'
+    | ''
   interface LayoutWindowOptions {
     matchMedia?: {
       minWidth?: number
@@ -34,12 +47,21 @@ declare namespace UniApp {
   }
 
   interface UniConfig {
+    conditionUrl?: string
     ready?: boolean
+
+    getTabBarConfig: () => Record<string, any>
+
     router?: {
       strict: boolean
       base: string
+      assets: string
+      routerBase: string
     }
     nvue?: {
+      'flex-direction': 'column' | 'row'
+    }
+    uvue?: {
       'flex-direction': 'column' | 'row'
     }
     globalStyle: PagesJsonPageStyle & {
@@ -59,8 +81,16 @@ declare namespace UniApp {
     tabBar?: TabBarOptions
     subPackages?: { root: string }[]
     qqMapKey?: string
+    bMapKey?: string
     googleMapKey?: string
+    aMapKey?: string
+    aMapServiceHost?: string
+    aMapSecurityJsCode?: string
     // app-plus
+    referrerInfo?: {
+      appId: string
+      extraData: Record<string, any>
+    }
     entryPagePath?: string
     entryPageQuery?: string
     realEntryPagePath?: string
@@ -74,6 +104,13 @@ declare namespace UniApp {
     locale: string
     fallbackLocale: string
     locales: Record<string, Record<string, string>>
+    compilerVersion: string
+    appId: string
+    appName: string
+    appVersion: string
+    appVersionCode: string
+    darkmode: Boolean | ThemeMode
+    themeConfig: ThemeJson
   }
 
   interface UniRoute {
@@ -163,14 +200,20 @@ declare namespace UniApp {
 
   interface PagesJsonPagePlatformStyle {
     h5?: PagesJsonPageStyle
+    web?: PagesJsonPageStyle
     app?: PagesJsonPageStyle
     'app-plus'?: PagesJsonPageStyle
+    'app-harmony'?: PagesJsonPageStyle
     'mp-alipay'?: PagesJsonPageStyle
     'mp-baidu'?: PagesJsonPageStyle
+    'mp-harmony'?: PagesJsonPageStyle
     'mp-qq'?: PagesJsonPageStyle
     'mp-toutiao'?: PagesJsonPageStyle
     'mp-weixin'?: PagesJsonPageStyle
     'mp-kuaishou'?: PagesJsonPageStyle
+    'mp-lark'?: PagesJsonPageStyle
+    'mp-jd'?: PagesJsonPageStyle
+    'mp-xhs'?: PagesJsonPageStyle
     'quickapp-webview'?: PagesJsonPageStyle
     'quickapp-webview-huawei'?: PagesJsonPageStyle
     'quickapp-webview-union'?: PagesJsonPageStyle
@@ -184,6 +227,7 @@ declare namespace UniApp {
   }
   interface PagesJsonPageStyle extends PagesJsonPagePlatformStyle {
     isNVue?: boolean
+    isSubNVue?: boolean
     disableScroll?: boolean
     enablePullDownRefresh?: boolean
     navigationBar: PageNavigationBar
@@ -191,11 +235,17 @@ declare namespace UniApp {
     onReachBottomDistance?: number
     pageOrientation?: 'auto' | 'portrait' | 'landscape'
     backgroundColor?: string
+    backgroundColorContent?: string
+    navigationStyle?: 'default' | 'custom'
     maxWidth?: string | number
     // app-plus
+    scrollIndicator?: 'none'
     animationType?: string
     animationDuration?: number
     subNVues?: PagesJsonPageStyleSubNVue[]
+    disableSwipeBack?: Boolean
+    popGesture?: 'close' | 'none'
+    enableUcssReset?: boolean
   }
   interface PageRouteMeta extends PagesJsonPageStyle {
     id?: number
@@ -205,16 +255,20 @@ declare namespace UniApp {
     isEntry?: boolean
     isTabBar?: boolean
     tabBarIndex?: number
+    tabBarText?: string
     windowTop?: number
     topWindow?: boolean
     leftWindow?: boolean
     rightWindow?: boolean
     eventChannel?: any
+    // 目前 app-harmony 专用
+    isNVueStyle?: boolean
   }
 
   interface PagesJsonPageOptions {
     path: string
     style: PagesJsonPageStyle
+    needLogin?: boolean
   }
   interface PagesJsonSubpackagesOptions {
     root: string
@@ -229,6 +283,12 @@ declare namespace UniApp {
 
   interface PagesJson {
     pages: PagesJsonPageOptions[]
+    preloadRule?: {
+      [page: string]: {
+        network?: 'all' | 'wifi'
+        packages: string[]
+      }
+    }
     subpackages?: PagesJsonSubpackagesOptions[]
     subPackages?: PagesJsonSubpackagesOptions[]
     globalStyle: PagesJsonPageStyle
@@ -242,10 +302,30 @@ declare namespace UniApp {
         [name: string]: string
       }
     }
+    uni_modules?: {
+      exports?: boolean
+    }
     condition?: {
       current?: number
-      list?: { name?: string; path: string; query?: string }[]
+      list?: {
+        id?: string | number
+        name?: string
+        path?: string
+        pathName?: string
+        query?: string
+      }[]
     }
+    uniIdRouter?: {
+      loginPage: string
+      needLogin?: string[]
+      resToLogin?: boolean
+    }
+    themeConfig?: Record<string, any>
+  }
+
+  interface ThemeJson {
+    light?: Record<string, string>
+    dark?: Record<string, string>
   }
 
   interface TabBarItemBaseOptions {
@@ -256,6 +336,15 @@ declare namespace UniApp {
     redDot?: boolean
     badge?: string
     visible?: boolean
+    iconfont?: TabBarItemIconfontOptions
+  }
+
+  interface TabBarItemIconfontOptions {
+    text: string
+    selectedText: string
+    fontSize?: string
+    color?: string
+    selectedColor?: string
   }
 
   interface TabBarNormalItemOptions extends TabBarItemBaseOptions {
@@ -279,6 +368,8 @@ declare namespace UniApp {
     selectedColor: string
     backgroundColor: string
     borderStyle?: 'black' | 'white'
+    borderColor?: string
+    iconfontSrc?: string
     list: TabBarItemOptions[]
     blurEffect?: 'none' | 'dark' | 'extralight' | 'light'
     fontSize?: string
@@ -458,3 +549,65 @@ declare namespace UniApp {
     ): void
   }
 }
+
+import UniApp = UniNamespace
+
+interface FontFaceDescriptors {
+  variant?: string
+}
+
+declare class UniNormalPageImpl implements UniPage {
+  vm: ComponentPublicInstance
+  $vm: ComponentPublicInstance
+  route: string
+  options: UTSJSONObject
+  innerWidth: number
+  innerHeight: number
+  safeArea: UniSafeArea
+  safeAreaInsets: UniSafeAreaInsets
+  getParentPage: () => UniPage | null
+  getParentPageByJS: () => UniPage | null
+  getDialogPages(): UniDialogPage[]
+  getPageStyle(): UTSJSONObject
+  $getPageStyle(): UTSJSONObject
+  getPageStyleByJS(): UTSJSONObject
+  setPageStyle(style: UTSJSONObject): void
+  $setPageStyle(style: UTSJSONObject): void
+  setPageStyleByJS(style: UTSJSONObject): void
+  getElementById(id: string.IDString | string): UniElement | null
+  getAndroidView(): null
+  getIOSView(): null
+  getHTMLElement(): null
+}
+
+declare class UniDialogPageImpl implements UniPage {
+  vm: ComponentPublicInstance
+  $vm: ComponentPublicInstance
+  route: string
+  options: UTSJSONObject
+  innerWidth: number
+  innerHeight: number
+  safeArea: UniSafeArea
+  safeAreaInsets: UniSafeAreaInsets
+  getParentPage: () => UniPage | null
+  getParentPageByJS: () => UniPage | null
+  getDialogPages(): UniDialogPage[]
+  getPageStyle(): UTSJSONObject
+  $getPageStyle(): UTSJSONObject
+  getPageStyleByJS(): UTSJSONObject
+  setPageStyle(style: UTSJSONObject): void
+  $setPageStyle(style: UTSJSONObject): void
+  setPageStyleByJS(style: UTSJSONObject): void
+  getElementById(id: string.IDString | string): UniElement | null
+  getAndroidView(): null
+  getIOSView(): null
+  getHTMLElement(): null
+  $component: any | null
+  $disableEscBack: boolean
+  $triggerParentHide: boolean
+}
+
+declare function __registerWebViewUniConsole(
+  getEvalJSCode: () => string,
+  sendConsoleData: (data: string) => void
+): void

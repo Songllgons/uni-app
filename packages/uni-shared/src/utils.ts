@@ -1,3 +1,5 @@
+import { isFunction, isPlainObject, isString } from '@vue/shared'
+
 export function cache<T>(fn: (str: string) => T) {
   const cache: Record<string, T> = Object.create(null)
   return (str: string) => {
@@ -14,8 +16,16 @@ export function getLen(str = '') {
   return ('' + str).replace(/[^\x00-\xff]/g, '**').length
 }
 
+function hasLeadingSlash(str: string) {
+  return str.indexOf('/') === 0
+}
+
+export function addLeadingSlash(str: string) {
+  return hasLeadingSlash(str) ? str : '/' + str
+}
+
 export function removeLeadingSlash(str: string) {
-  return str.indexOf('/') === 0 ? str.substr(1) : str
+  return hasLeadingSlash(str) ? str.slice(1) : str
 }
 
 export const invokeArrayFns = (fns: Function[], arg?: any) => {
@@ -85,26 +95,30 @@ export function callOptions(
   data: { [key: string]: any; errMsg: string } | string
 ): void {
   options = options || {}
-  if (typeof data === 'string') {
+  if (isString(data)) {
     data = {
       errMsg: data,
     }
   }
   if (/:ok$/.test(data.errMsg)) {
-    if (typeof options.success === 'function') {
+    if (isFunction(options.success)) {
       options.success(data)
     }
   } else {
-    if (typeof options.fail === 'function') {
+    if (isFunction(options.fail)) {
       options.fail(data)
     }
   }
-  if (typeof options.complete === 'function') {
+  if (isFunction(options.complete)) {
     options.complete(data)
   }
 }
 
 export function getValueByDataPath(obj: any, path: string): unknown {
+  if (!isString(path)) {
+    return
+  }
+  path = path.replace(/\[(\d+)\]/g, '.$1')
   const parts = path.split('.')
   let key: number | string = parts[0]
   if (!obj) {
@@ -114,4 +128,56 @@ export function getValueByDataPath(obj: any, path: string): unknown {
     return obj[key]
   }
   return getValueByDataPath(obj[key], parts.slice(1).join('.'))
+}
+
+export function sortObject<T extends Object>(obj: T) {
+  let sortObj: T = {} as T
+  if (isPlainObject(obj)) {
+    Object.keys(obj)
+      .sort()
+      .forEach((key) => {
+        const _key = key as keyof T
+        sortObj[_key] = obj[_key]
+      })
+  }
+  return !Object.keys(sortObj) ? obj : sortObj
+}
+
+function getGlobalOnce() {
+  if (typeof globalThis !== 'undefined') {
+    return globalThis
+  }
+  // worker
+  if (typeof self !== 'undefined') {
+    return self
+  }
+  // browser
+  if (typeof window !== 'undefined') {
+    return window
+  }
+  // nodejs
+  // if (typeof global !== 'undefined') {
+  //   return global
+  // }
+
+  function g(this: any) {
+    return this
+  }
+
+  if (typeof g() !== 'undefined') {
+    return g()
+  }
+
+  return (function () {
+    return new Function('return this')()
+  })()
+}
+
+let g: any = undefined
+export function getGlobal() {
+  if (g) {
+    return g
+  }
+  g = getGlobalOnce()
+  return g
 }

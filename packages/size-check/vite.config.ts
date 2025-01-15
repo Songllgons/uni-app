@@ -1,13 +1,7 @@
 import path from 'path'
-import uniH5VitePlugins from '@dcloudio/uni-h5-vite'
+import terser from '@rollup/plugin-terser'
 import uni from '@dcloudio/vite-plugin-uni'
 import { UserConfig } from 'vite'
-
-process.env.UNI_CLI_CONTEXT = __dirname
-process.env.UNI_INPUT_DIR = path.resolve(__dirname, 'src')
-process.env.UNI_OUTPUT_DIR = path.resolve(__dirname, 'dist')
-process.env.UNI_PLATFORM = 'h5'
-
 export default {
   root: __dirname,
   logLevel: 'info',
@@ -16,14 +10,15 @@ export default {
       entry: path.resolve(__dirname, 'src/main.ts'),
       formats: ['es'],
     },
-    // minify: false,
     rollupOptions: {
       // external: ['vue', '@vue/shared'],
+      plugins: [terser()],
       output: {
         inlineDynamicImports: true,
+        entryFileNames: 'size-check.es.js',
       },
     },
   },
 
-  plugins: [...uniH5VitePlugins, uni({ viteLegacyOptions: false })],
+  plugins: [uni({ viteLegacyOptions: false })],
 } as UserConfig

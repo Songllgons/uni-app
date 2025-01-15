@@ -1,0 +1,62 @@
+[
+  {
+    "input": {
+      "src/service/index.ts": "dist/uni.runtime.esm.js"
+    },
+    "output": {
+      "freeze": false
+    },
+    "replacements": {
+      "process.env.NODE_ENV": "'production'",
+      "__X__": "false",
+      "__PLUS__": "false",
+      "__PLATFORM__": "'app'",
+      "__APP_VIEW__": "false",
+      "__VUE_OPTIONS_API__": "true",
+      "__VUE_PROD_DEVTOOLS__": "false",
+      "__VUE_PROD_HYDRATION_MISMATCH_DETAILS__": "false",
+      "__UNI_FEATURE_WX__": "true",
+      "__UNI_FEATURE_PROMISE__": "false",
+      "__UNI_FEATURE_I18N_EN__": "true",
+      "__UNI_FEATURE_I18N_ES__": "true",
+      "__UNI_FEATURE_I18N_FR__": "true",
+      "__UNI_FEATURE_I18N_ZH_HANS__": "true",
+      "__UNI_FEATURE_I18N_ZH_HANT__": "true",
+      "plus.os.name": "'HarmonyOS'",
+      "plus.os.version": "''"
+    },
+    "external": [
+      "vue",
+      "@vue/shared",
+      "@dcloudio/uni-shared"
+    ]
+  },
+  {
+    "input": {
+      "src/compiler/index.ts": "dist/uni.compiler.js"
+    },
+    "output": {
+      "format": "cjs"
+    },
+    "external": [
+      "@dcloudio/uni-app-uts",
+      "@dcloudio/uni-app-vite",
+      "@dcloudio/uni-cli-shared",
+      "fs-extra"
+    ]
+  },
+  {
+    "input": {
+      "src/api/index.ts": "dist/uni.api.js"
+    },
+    "output": {
+      "format": "esm"
+    },
+    "external": [
+      "@vue/shared"
+    ],
+    "replacements": {
+      "__X__": "true"
+    }
+  }
+]

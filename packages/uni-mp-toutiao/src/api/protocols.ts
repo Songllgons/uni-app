@@ -1,9 +1,13 @@
-export { redirectTo, navigateTo, previewImage } from '@dcloudio/uni-mp-core'
-export const chooseImage = {
-  args: {
-    sizeType: false,
-  },
-}
+export {
+  redirectTo,
+  previewImage,
+  getSystemInfo,
+  getSystemInfoSync,
+  onError,
+  offError,
+} from '@dcloudio/uni-mp-core'
+import { navigateTo as _navigateTo } from '@dcloudio/uni-mp-core'
+export const navigateTo = _navigateTo()
 export const connectSocket = {
   args: {
     method: false,
@@ -23,28 +27,6 @@ export const scanCode = {
 export const startAccelerometer = {
   args: {
     interval: false,
-  },
-}
-export const showToast = {
-  args: {
-    image: false,
-    mask: false,
-  },
-}
-export const showLoading = {
-  args: {
-    mask: false,
-  },
-}
-export const showModal = {
-  args: {
-    cancelColor: false,
-    confirmColor: false,
-  },
-}
-export const showActionSheet = {
-  args: {
-    itemColor: false,
   },
 }
 export const login = {

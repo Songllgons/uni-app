@@ -1,8 +1,22 @@
-import { isPlainObject, isArray, hasOwn } from '@vue/shared'
+import { hasOwn, isArray, isPlainObject } from '@vue/shared'
 
-import { addSafeAreaInsets } from '@dcloudio/uni-mp-core'
+import {
+  navigateTo as _navigateTo,
+  addSafeAreaInsets,
+  isSyncApi,
+  populateParameters,
+  useDeviceId,
+} from '@dcloudio/uni-mp-core'
 
-export { redirectTo, navigateTo } from '@dcloudio/uni-mp-core'
+import { getStorageSync } from './shims'
+
+export {
+  redirectTo,
+  onError,
+  offError,
+  onSocketOpen,
+  onSocketMessage,
+} from '@dcloudio/uni-mp-core'
 
 function handleNetworkInfo(
   fromRes: my.IGetNetworkTypeSuccessResult,
@@ -23,20 +37,46 @@ function handleNetworkInfo(
   }
 }
 
+function reviseScreenSize(
+  fromRes: my.IGetSystemInfoSuccessResult & {
+    screen?: { width: number; height: number }
+  },
+  toRes: UniApp.GetSystemInfoResult
+) {
+  // 支付宝: 10.2.0+ 修正屏幕宽度和高度 https://opendocs.alipay.com/mini/api/gawhvz
+  if (fromRes.screen) {
+    toRes.screenWidth = fromRes.screen.width
+    toRes.screenHeight = fromRes.screen.height
+  }
+}
+
 function handleSystemInfo(
   fromRes: my.IGetSystemInfoSuccessResult,
   toRes: UniApp.GetSystemInfoResult
 ) {
+  reviseScreenSize(fromRes, toRes)
   addSafeAreaInsets(fromRes, toRes)
+  useDeviceId({
+    getStorageSync: getStorageSync as Uni['getStorageSync'],
+  })(fromRes, toRes)
+  populateParameters(fromRes, toRes)
 
   let platform = fromRes.platform ? fromRes.platform.toLowerCase() : 'devtools'
-  if (!~['android', 'ios'].indexOf(platform)) {
-    platform = 'devtools'
+  if (my.canIUse('isIDE')) {
+    // @ts-expect-error Property 'isIDE' does not exist on type 'typeof my'
+    platform = my.isIDE ? 'devtools' : platform
+  } else {
+    if (!~['android', 'ios'].indexOf(platform)) {
+      platform = 'devtools'
+    }
   }
   toRes.platform = platform
 }
 
 export function returnValue(methodName: string, res: Record<string, any> = {}) {
+  if (isSyncApi(methodName)) {
+    return res
+  }
   // 通用 returnValue 解析
   if (res.error || res.errorMessage) {
     res.errMsg = `${methodName}:fail ${res.errorMessage || res.error}`
@@ -140,7 +180,6 @@ export function showToast({ icon = 'success' }: UniApp.ShowToastOptions = {}) {
   const args = {
     title: 'content',
     icon: 'type',
-    duration: false,
     image: false,
     mask: false,
   }
@@ -168,7 +207,6 @@ export const showActionSheet = {
 export const showLoading = {
   args: {
     title: 'content',
-    mask: false,
   },
 }
 export const uploadFile = {
@@ -448,12 +486,15 @@ export const showShareMenu = {
 export const hideHomeButton = {
   name: 'hideBackHome',
 }
-export const saveImageToPhotosAlbum = {
-  name: 'saveImage',
-  args: {
-    filePath: 'url',
-  },
-}
+// 钉钉小程序处理
+export const saveImageToPhotosAlbum = my.canIUse('saveImageToPhotosAlbum')
+  ? {}
+  : {
+      name: 'saveImage',
+      args: {
+        filePath: 'url',
+      },
+    }
 export const saveVideoToPhotosAlbum = {
   args: {
     filePath: 'src',
@@ -472,3 +513,6 @@ export const chooseAddress = {
     toRes.errMsg = toRes.errMsg + ' ' + fromRes.resultStatus
   },
 }
+export const navigateTo = my.canIUse('getOpenerEventChannel')
+  ? {}
+  : _navigateTo()

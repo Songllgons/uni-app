@@ -1,7 +1,7 @@
 import { getCurrentPageId } from '@dcloudio/uni-core'
 import {
   API_GET_SELECTED_TEXT_RANGE,
-  API_TYPE_GET_SELECTED_TEXT_RANGE,
+  type API_TYPE_GET_SELECTED_TEXT_RANGE,
 } from '../../protocols/keyboard/getSelectedTextRange'
 import { defineAsyncApi } from '../../helpers/api'
 
@@ -12,7 +12,7 @@ export const getSelectedTextRange =
       UniServiceJSBridge.invokeViewMethod<
         {},
         UniApp.GetSelectedTextRangeSuccessCallbackResult
-      >('getSelectedTextRange', {}, getCurrentPageId(), (res) => {
+      >(API_GET_SELECTED_TEXT_RANGE, {}, getCurrentPageId(), (res) => {
         if (
           typeof res.end === 'undefined' &&
           typeof res.start === 'undefined'

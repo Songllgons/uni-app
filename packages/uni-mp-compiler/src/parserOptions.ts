@@ -1,17 +1,11 @@
 import {
-  TextModes,
-  ParserOptions,
-  ElementNode,
+  type ElementNode,
   Namespaces,
   NodeTypes,
+  type ParserOptions,
 } from '@vue/compiler-core'
-import { makeMap, isVoidTag, isHTMLTag, isSVGTag } from '@vue/shared'
-import { decodeHtml } from './decodeHtml'
-
-const isRawTextContainer = /*#__PURE__*/ makeMap(
-  'style,iframe,script,noscript',
-  true
-)
+import { isHTMLTag, isSVGTag, isVoidTag as isVoidTagRaw } from '@vue/shared'
+// import { decodeHtml } from './decodeHtml'
 
 export const enum DOMNamespaces {
   HTML = Namespaces.HTML,
@@ -20,10 +14,15 @@ export const enum DOMNamespaces {
 }
 
 export const parserOptions: ParserOptions = {
-  isVoidTag,
+  isVoidTag(tag) {
+    // 微信小程序允许 Input 嵌套其他组件 https://ask.dcloud.net.cn/question/202776
+    // if (tag === 'input') {
+    //   return false
+    // }
+    return isVoidTagRaw(tag)
+  },
   isNativeTag: (tag) => isHTMLTag(tag) || isSVGTag(tag),
   isPreTag: (tag) => tag === 'pre',
-  decodeEntities: decodeHtml,
 
   // https://html.spec.whatwg.org/multipage/parsing.html#tree-construction-dispatcher
   getNamespace(tag: string, parent: ElementNode | undefined): DOMNamespaces {
@@ -73,17 +72,5 @@ export const parserOptions: ParserOptions = {
     }
     return ns
   },
-
-  // https://html.spec.whatwg.org/multipage/parsing.html#parsing-html-fragments
-  getTextMode({ tag, ns }: ElementNode): TextModes {
-    if (ns === DOMNamespaces.HTML) {
-      if (tag === 'textarea' || tag === 'title') {
-        return TextModes.RCDATA
-      }
-      if (isRawTextContainer(tag)) {
-        return TextModes.RAWTEXT
-      }
-    }
-    return TextModes.DATA
-  },
+  parseMode: 'html',
 }

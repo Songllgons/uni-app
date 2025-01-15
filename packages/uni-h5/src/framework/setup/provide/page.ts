@@ -1,13 +1,17 @@
 import { extend } from '@vue/shared'
-import { reactive, provide, inject } from 'vue'
+import { inject, provide, reactive } from 'vue'
 import { useRoute } from 'vue-router'
 
-import { NAVBAR_HEIGHT, parseQuery } from '@dcloudio/uni-shared'
 import {
+  NAVBAR_HEIGHT,
+  addLeadingSlash,
+  parseQuery,
+} from '@dcloudio/uni-shared'
+import {
+  PolySymbol,
   initNavigationBarI18n,
   initRouteMeta,
   normalizePullToRefreshRpx,
-  PolySymbol,
 } from '@dcloudio/uni-core'
 
 import safeAreaInsets from 'safe-area-insets'
@@ -37,7 +41,7 @@ export function usePageRoute() {
     )
   }
   const { meta } = __uniRoutes[0]
-  const path = '/' + meta.route
+  const path = addLeadingSlash(meta.route)
   return {
     meta,
     query: query,
@@ -70,7 +74,7 @@ function initPageMeta(id: number) {
 function normalizePageMeta(pageMeta: UniApp.PageRouteMeta) {
   if (__UNI_FEATURE_PULL_DOWN_REFRESH__) {
     const { enablePullDownRefresh, navigationBar } = pageMeta
-    if (enablePullDownRefresh) {
+    if (__X__ || enablePullDownRefresh) {
       const pullToRefresh = normalizePullToRefreshRpx(
         extend(
           {
@@ -92,14 +96,14 @@ function normalizePageMeta(pageMeta: UniApp.PageRouteMeta) {
       pageMeta.pullToRefresh = pullToRefresh
     }
   }
-  if (__UNI_FEATURE_NAVIGATIONBAR__) {
+  if (__UNI_FEATURE_NAVIGATIONBAR__ || __UNI_FEATURE_I18N_LOCALE__) {
     const { navigationBar } = pageMeta
     const { titleSize, titleColor, backgroundColor } = navigationBar
     navigationBar.titleText = navigationBar.titleText || ''
     navigationBar.type = navigationBar.type || 'default'
     navigationBar.titleSize = titleSize || '16px'
-    navigationBar.titleColor = titleColor || '#ffffff'
-    navigationBar.backgroundColor = backgroundColor || '#F7F7F7'
+    navigationBar.titleColor = titleColor || '#000000'
+    navigationBar.backgroundColor = backgroundColor || '#F8F8F8'
     __UNI_FEATURE_I18N_LOCALE__ && initNavigationBarI18n(navigationBar)
   }
   if (!__NODE_JS__ && __UNI_FEATURE_PAGES__ && history.state) {

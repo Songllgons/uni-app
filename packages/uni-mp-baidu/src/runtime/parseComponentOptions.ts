@@ -1,22 +1,21 @@
 import { hasOwn } from '@vue/shared'
-
 import {
-  MPComponentInstance,
-  MPComponentOptions,
-  initMocks,
-} from '@dcloudio/uni-mp-core'
-import { ON_LOAD, ON_SHOW } from '@dcloudio/uni-shared'
-import {
-  fixSetDataStart,
+  type MPComponentInstance,
+  type MPComponentOptions,
   fixSetDataEnd,
-} from '../../../uni-mp-weixin/src/runtime/fixSetData'
+  fixSetDataStart,
+  handleEvent,
+  initMocks,
+  nextSetDataTick,
+} from '@dcloudio/uni-mp-core'
+import { ON_INIT, ON_LOAD, ON_SHOW } from '@dcloudio/uni-shared'
 
 export { handleLink, initLifetimes } from '@dcloudio/uni-mp-weixin'
 
 export const mocks = ['nodeId', 'componentName', '_componentId', 'uniquePrefix']
 
 export function isPage(mpInstance: MPComponentInstance) {
-  return !hasOwn(mpInstance, 'ownerId')
+  return !!(mpInstance.methods as any).onLoad
 }
 
 export function initRelation(mpInstance: MPComponentInstance, detail: object) {
@@ -43,12 +42,15 @@ export function parse(componentOptions: MPComponentOptions) {
       const pages = getCurrentPages()
       this.pageinstance = pages[pages.length - 1]
     }
-
+    this.pageinstance._$props = query
     // 处理百度小程序 onInit 生命周期调用 setData 无效的问题
     fixSetDataStart(this as MPComponentInstance)
     oldAttached.call(this)
     this.pageinstance.$vm = this.$vm
-    this.$vm.__call_hook('onInit', query)
+    if (__X__) {
+      this.pageinstance.vm = this.pageinstance.$vm
+    }
+    this.$vm.$callHook(ON_INIT, query)
   }
   lifetimes.attached = function attached(this: MPComponentInstance) {
     if (!this.$vm) {
@@ -62,15 +64,20 @@ export function parse(componentOptions: MPComponentOptions) {
       // 百度 当组件作为页面时 pageinstance 不是原来组件的 instance
       const pageInstance = (this as any).pageinstance
       pageInstance.$vm = this.$vm
+      if (__X__) {
+        pageInstance.vm = pageInstance.$vm
+      }
       if (hasOwn(pageInstance, '_$args')) {
         this.$vm.$callHook(ON_LOAD, pageInstance._$args)
         this.$vm.$callHook(ON_SHOW)
         delete pageInstance._$args
       }
     } else {
-      // 百度小程序组件不触发methods内的onReady
+      // 百度小程序组件不触发 methods 内的 onReady
       if (this.$vm) {
-        this.$vm.$callHook('mounted')
+        nextSetDataTick(this, () => {
+          this.$vm!.$callHook('mounted')
+        })
       }
     }
   }
@@ -83,4 +90,6 @@ export function parse(componentOptions: MPComponentOptions) {
     __l: methods.__l,
   }
   delete methods.__l
+  // 百度小程序自定义组件，不支持绑定动态事件，故由 __e 分发
+  methods.__e = handleEvent
 }

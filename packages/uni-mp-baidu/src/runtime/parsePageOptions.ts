@@ -1,5 +1,9 @@
-import { MPComponentOptions, MPComponentInstance } from '@dcloudio/uni-mp-core'
-import { ON_LOAD, ON_SHOW } from '@dcloudio/uni-shared'
+import { extend } from '@vue/shared'
+import type {
+  MPComponentInstance,
+  MPComponentOptions,
+} from '@dcloudio/uni-mp-core'
+import { ON_LOAD, ON_SHOW, stringifyQuery } from '@dcloudio/uni-shared'
 
 import { parse as parseComponentOptions } from './parseComponentOptions'
 
@@ -18,14 +22,30 @@ export function parse(pageOptions: MPComponentOptions) {
     }
   }
 
-  methods.onLoad = function onLoad(this: MPComponentInstance, args) {
+  methods.onLoad = function onLoad(
+    this: MPComponentInstance,
+    query: Record<string, any>
+  ) {
     // 百度 onLoad 在 attached 之前触发，先存储 args, 在 attached 里边触发 onLoad
     if (this.$vm) {
       ;(this as any)._$loaded = true
-      this.$vm.$callHook(ON_LOAD, args)
+      const copyQuery = extend({}, query)
+      delete copyQuery.__id__
+
+      if (__X__) {
+        // query并非多层级结构，无需递归处理
+        ;(this as any).options = new UTSJSONObject(copyQuery || {})
+      } else {
+        ;(this as any).options = copyQuery
+      }
+      ;(this as any).pageinstance.$page = (this as any).$page = {
+        fullPath:
+          '/' + (this as any).pageinstance.route + stringifyQuery(copyQuery),
+      }
+      this.$vm.$callHook(ON_LOAD, query)
       this.$vm.$callHook(ON_SHOW)
     } else {
-      ;(this as any).pageinstance._$args = args
+      ;(this as any).pageinstance._$args = query
     }
   }
 }

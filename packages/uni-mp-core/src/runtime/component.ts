@@ -1,20 +1,34 @@
-import { extend } from '@vue/shared'
+import { extend, isArray, isObject } from '@vue/shared'
 
-import { ComponentOptions, ComponentPublicInstance } from 'vue'
+import {
+  type ComponentOptions,
+  type ComponentPublicInstance,
+  // @ts-expect-error
+  devtoolsComponentAdded,
+} from 'vue'
+// @ts-expect-error
+import { getExposeProxy } from 'vue'
 
-import { initExtraOptions, initWxsCallMethods, initBehavior } from './util'
+import { registerCustomElement } from 'vue'
+
+import {
+  initExtraOptions,
+  initWorkletMethods,
+  initWxsCallMethods,
+} from './util'
 
 import { initProps } from './componentProps'
-import { applyOptions } from './componentOptions'
-import { handleEvent } from './componentEvents'
-import { CreateComponentOptions } from './componentInstance'
+import { applyOptions, initPropsObserver } from './componentOptions'
+import type { CreateComponentOptions } from './componentInstance'
 
 import Component = WechatMiniprogram.Component
 
 export interface CustomComponentInstanceProperty {
   $vm?: ComponentPublicInstance
+  vm?: ComponentPublicInstance
   _$vueId: string
   _$vuePid?: string
+  _$setRef?: (fn: Function) => void
 }
 
 export type MPComponentOptions = Component.Options<
@@ -52,6 +66,10 @@ export interface ParseComponentOptions {
   ) => void
   mocks: string[]
   isPage: (mpInstance: MPComponentInstance) => boolean
+  /**
+   * 当前组件在uni-app项目内是否为页面
+   */
+  isPageInProject?: boolean
   initRelation: (
     mpInstance: MPComponentInstance,
     options: RelationOptions
@@ -70,6 +88,7 @@ export function parseComponent(
     parse,
     mocks,
     isPage,
+    isPageInProject,
     initRelation,
     handleLink,
     initLifetimes,
@@ -79,7 +98,21 @@ export function parseComponent(
 
   const options: Component.ComponentOptions = {
     multipleSlots: true,
+    // styleIsolation: 'apply-shared',
     addGlobalClass: true,
+    pureDataPattern: /^uP$/,
+  }
+
+  if (__X__ && __UNI_FEATURE_VIRTUAL_HOST__ && !isPageInProject) {
+    options.virtualHost = true
+  }
+
+  if (isArray(vueOptions.mixins)) {
+    vueOptions.mixins.forEach((item) => {
+      if (isObject(item.options)) {
+        extend(options, item.options)
+      }
+    })
   }
 
   if (vueOptions.options) {
@@ -91,6 +124,9 @@ export function parseComponent(
     lifetimes: initLifetimes({ mocks, isPage, initRelation, vueOptions }),
     pageLifetimes: {
       show() {
+        if (__VUE_PROD_DEVTOOLS__) {
+          devtoolsComponentAdded(this.$vm!.$)
+        }
         this.$vm && this.$vm.$callHook('onPageShow')
       },
       hide() {
@@ -102,15 +138,16 @@ export function parseComponent(
     },
     methods: {
       __l: handleLink,
-      __e: handleEvent,
     },
   }
 
   if (__VUE_OPTIONS_API__) {
-    applyOptions(mpComponentOptions, vueOptions, initBehavior)
+    applyOptions(mpComponentOptions, vueOptions)
   }
 
-  initProps(mpComponentOptions, vueOptions.props, false)
+  initProps(mpComponentOptions)
+
+  initPropsObserver(mpComponentOptions)
 
   initExtraOptions(mpComponentOptions, vueOptions)
 
@@ -118,6 +155,12 @@ export function parseComponent(
     mpComponentOptions.methods as Component.MethodOption,
     vueOptions.wxsCallMethods
   )
+  if (__PLATFORM__ === 'mp-weixin') {
+    initWorkletMethods(
+      mpComponentOptions.methods as Component.MethodOption,
+      vueOptions.methods
+    )
+  }
 
   if (parse) {
     parse(mpComponentOptions, { handleLink })
@@ -126,8 +169,20 @@ export function parseComponent(
   return mpComponentOptions
 }
 
+declare let Component: WechatMiniprogram.Component.Constructor
+
 export function initCreateComponent(parseOptions: ParseComponentOptions) {
-  return function createComponent(vueComponentOptions: ComponentOptions) {
+  return function createComponent(
+    vueComponentOptions: ComponentOptions & {
+      rootElement?: { name: string; class: any }
+    }
+  ) {
+    if (__X__) {
+      const rootElement = vueComponentOptions.rootElement
+      if (rootElement) {
+        registerCustomElement(rootElement.name, rootElement.class)
+      }
+    }
     return Component(parseComponent(vueComponentOptions, parseOptions))
   }
 }
@@ -140,19 +195,33 @@ interface InitialVNode {
   props: Record<string, any>
 }
 
+function getAppVm() {
+  if (process.env.UNI_MP_PLUGIN) {
+    return __GLOBAL__.$vm
+  }
+  if (process.env.UNI_SUBPACKAGE) {
+    return __GLOBAL__.$subpackages[process.env.UNI_SUBPACKAGE].$vm
+  }
+  return getApp().$vm
+}
+
 export function $createComponent(
   initialVNode: InitialVNode,
   options: CreateComponentOptions
 ) {
   if (!$createComponentFn) {
-    $createComponentFn = getApp().$vm.$createComponent
+    $createComponentFn = getAppVm().$createComponent
   }
-  return $createComponentFn(initialVNode, options)
+  const proxy = $createComponentFn(
+    initialVNode,
+    options
+  ) as ComponentPublicInstance
+  return getExposeProxy(proxy.$) || proxy
 }
 
 export function $destroyComponent(instance: ComponentPublicInstance) {
   if (!$destroyComponentFn) {
-    $destroyComponentFn = getApp().$vm.$destroyComponent
+    $destroyComponentFn = getAppVm().$destroyComponent
   }
   return $destroyComponentFn(instance)
 }

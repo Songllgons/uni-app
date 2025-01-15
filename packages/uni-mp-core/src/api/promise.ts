@@ -7,7 +7,9 @@ import {
 } from '@dcloudio/uni-api/src/helpers/interceptor'
 
 const SYNC_API_RE =
-  /^\$|getLocale|setLocale|sendNativeEvent|restoreGlobal|getCurrentSubNVue|getMenuButtonBoundingClientRect|^report|interceptors|Interceptor$|getSubNVueById|requireNativePlugin|upx2px|hideKeyboard|canIUse|^create|Sync$|Manager$|base64ToArrayBuffer|arrayBufferToBase64/
+  /^\$|__f__|getLocale|setLocale|sendNativeEvent|restoreGlobal|requireGlobal|getCurrentSubNVue|getMenuButtonBoundingClientRect|^report|interceptors|Interceptor$|getSubNVueById|requireNativePlugin|upx2px|rpx2px|hideKeyboard|canIUse|^create|Sync$|Manager$|base64ToArrayBuffer|arrayBufferToBase64|getDeviceInfo|getAppBaseInfo|getWindowInfo|getSystemSetting|getAppAuthorizeSetting/
+
+const SYNC_API_RE_X = /getElementById/
 
 const CONTEXT_API_RE = /^create|Manager$/
 
@@ -24,7 +26,11 @@ const CALLBACK_API_RE = /^on|^off/
 export function isContextApi(name: string) {
   return CONTEXT_API_RE.test(name) && CONTEXT_API_RE_EXC.indexOf(name) === -1
 }
+
 export function isSyncApi(name: string) {
+  if (__X__ && SYNC_API_RE_X.test(name)) {
+    return true
+  }
   return SYNC_API_RE.test(name) && ASYNC_API.indexOf(name) === -1
 }
 
@@ -66,13 +72,16 @@ export function promisify(name: string, api: unknown) {
   if (!isFunction(api)) {
     return api
   }
-  return function promiseApi(options: Record<string, any> = {}) {
+  return function promiseApi(
+    options: Record<string, any> = {},
+    ...rest: unknown[]
+  ) {
     if (
       isFunction(options.success) ||
       isFunction(options.fail) ||
       isFunction(options.complete)
     ) {
-      return wrapperReturnValue(name, invokeApi(name, api, options))
+      return wrapperReturnValue(name, invokeApi(name, api, options, rest))
     }
     return wrapperReturnValue(
       name,
@@ -84,7 +93,8 @@ export function promisify(name: string, api: unknown) {
             extend({}, options, {
               success: resolve,
               fail: reject,
-            })
+            }),
+            rest
           )
         })
       )

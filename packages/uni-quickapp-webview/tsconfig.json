@@ -1,6 +1,7 @@
 {
   "extends": "../../tsconfig.json",
   "compilerOptions": {
+    "resolveJsonModule": true,
     "paths": {
       "@dcloudio/*": ["packages/*/src"],
       "@dcloudio/uni-platform": [
@@ -8,5 +9,6 @@
       ],
       "@dcloudio/uni-mp-polyfill": ["packages/uni-mp-core/src/runtime/polyfill"]
     }
-  }
+  },
+  "include": ["src"]
 }

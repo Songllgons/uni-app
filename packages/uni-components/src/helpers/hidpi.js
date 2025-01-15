@@ -3,6 +3,9 @@ import { hasOwn } from '@vue/shared'
 export const pixelRatio = __NODE_JS__
   ? 1
   : /*#__PURE__*/ (function () {
+      if (__PLATFORM__ === 'h5' && navigator.userAgent.includes('jsdom')) {
+        return 1
+      }
       const canvas = document.createElement('canvas')
       canvas.height = canvas.width = 0
       const context = canvas.getContext('2d')
@@ -17,10 +20,14 @@ export const pixelRatio = __NODE_JS__
       return (window.devicePixelRatio || 1) / backingStore
     })()
 
-export function wrapper(canvas) {
-  canvas.width = canvas.offsetWidth * pixelRatio
-  canvas.height = canvas.offsetHeight * pixelRatio
-  canvas.getContext('2d').__hidpi__ = true
+export function wrapper(canvas, hidpi = true) {
+  const pixel_ratio = hidpi ? pixelRatio : 1
+  canvas.width = canvas.offsetWidth * pixel_ratio
+  canvas.height = canvas.offsetHeight * pixel_ratio
+  canvas.getContext('2d').__hidpi__ = hidpi
+  //#if _X_ && !_NODE_JS_
+  canvas.getContext('2d').scale(pixel_ratio, pixel_ratio)
+  //#endif
 }
 
 let isHidpi = false
@@ -29,6 +36,9 @@ export function initHidpi() {
     return
   }
   isHidpi = true
+  //#if _X_ && !_NODE_JS_
+  return
+  //#endif
   const forEach = function (obj, func) {
     for (const key in obj) {
       if (hasOwn(obj, key)) {
@@ -52,6 +62,7 @@ export function initHidpi() {
     translate: 'all',
     createRadialGradient: 'all',
     createLinearGradient: 'all',
+    transform: [4, 5],
     setTransform: [4, 5],
   }
 
@@ -129,6 +140,12 @@ export function initHidpi() {
 
         args[1] *= pixelRatio
         args[2] *= pixelRatio
+        // 因为 canvasCtx.fillText 的第 4 个参数为可选参数，用户可能不传，
+        // 所以在处理时需要判断一下，否则 undefined * pixelRatio => NaN，
+        // 会导致 canvas 无法绘制。
+        if (args[3] && typeof args[3] === 'number') {
+          args[3] *= pixelRatio
+        }
 
         var font = this.font
         this.font = font.replace(
@@ -153,6 +170,12 @@ export function initHidpi() {
 
         args[1] *= pixelRatio // x
         args[2] *= pixelRatio // y
+        // 因为 canvasCtx.strokeText 的第 4 个参数为可选参数，用户可能不传，
+        // 所以在处理时需要判断一下，否则 undefined * pixelRatio => NaN，
+        // 会导致 canvas 无法绘制。
+        if (args[3] && typeof args[3] === 'number') {
+          args[3] *= pixelRatio
+        }
 
         var font = this.font
         this.font = font.replace(

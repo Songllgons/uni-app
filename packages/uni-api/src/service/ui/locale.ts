@@ -1,4 +1,5 @@
 import { useI18n } from '@dcloudio/uni-core'
+import { UNI_STORAGE_LOCALE } from '@dcloudio/uni-shared'
 import { defineOnApi, defineSyncApi } from '../../helpers/api'
 
 const API_SET_LOCALE = 'setLocale'
@@ -17,7 +18,10 @@ export const getLocale = defineSyncApi<typeof uni.getLocale>(
   }
 )
 
-export const onLocaleChange = defineOnApi(API_ON_LOCALE_CHANGE, () => {})
+export const onLocaleChange = defineOnApi<typeof uni.onLocaleChange>(
+  API_ON_LOCALE_CHANGE,
+  () => {}
+)
 
 export const setLocale = defineSyncApi<typeof uni.setLocale>(
   API_SET_LOCALE,
@@ -39,6 +43,11 @@ export const setLocale = defineSyncApi<typeof uni.setLocale>(
           )
         })
         weex.requireModule('plus').setLanguage(locale)
+      }
+      if (__PLATFORM__ === 'h5') {
+        navigator.cookieEnabled &&
+          window.localStorage &&
+          (localStorage[UNI_STORAGE_LOCALE] = locale)
       }
       // 执行 uni.onLocaleChange
       UniServiceJSBridge.invokeOnCallback(API_ON_LOCALE_CHANGE, { locale })

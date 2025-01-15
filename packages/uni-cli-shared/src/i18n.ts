@@ -18,7 +18,7 @@ export function initI18nOptions(
     return
   }
   const manifestJson = parseManifestJsonOnce(inputDir)
-  const fallbackLocale = manifestJson.fallbackLocale || manifestJson.locale
+  let fallbackLocale = manifestJson.fallbackLocale || 'en'
   const locale = resolveI18nLocale(
     platform,
     Object.keys(locales),
@@ -88,7 +88,7 @@ export function initLocales(dir: string, withMessages: boolean = true) {
 }
 
 export function resolveI18nLocale(
-  platfrom: UniApp.PLATFORM,
+  platform: UniApp.PLATFORM,
   locales: string[],
   locale?: string
 ) {
@@ -96,7 +96,7 @@ export function resolveI18nLocale(
     return locale
   }
   const defaultLocales = ['zh-Hans', 'zh-Hant']
-  if (platfrom === 'app' || platfrom === 'h5') {
+  if (platform === 'app' || platform === 'h5') {
     defaultLocales.unshift('en')
   } else {
     // 小程序

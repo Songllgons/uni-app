@@ -1,26 +1,35 @@
 import { computed, onBeforeMount, ref } from 'vue'
 import { extend, isArray } from '@vue/shared'
-import { defineSystemComponent, Input } from '@dcloudio/uni-components'
+import { Input, defineSystemComponent } from '@dcloudio/uni-components'
 import { getRealPath } from '@dcloudio/uni-platform'
 import {
-  invokeHook,
-  updateStyle,
-  createSvgIconVNode,
-  ICON_PATH_SEARCH,
   ICON_PATH_BACK,
   ICON_PATH_CLOSE,
+  ICON_PATH_SEARCH,
+  createSvgIconVNode,
+  invokeHook,
+  updateStyle,
 } from '@dcloudio/uni-core'
+import {
+  ON_NAVIGATION_BAR_BUTTON_TAP,
+  ON_NAVIGATION_BAR_SEARCH_INPUT_CHANGED,
+  ON_NAVIGATION_BAR_SEARCH_INPUT_CLICKED,
+  ON_NAVIGATION_BAR_SEARCH_INPUT_CONFIRMED,
+  ON_NAVIGATION_BAR_SEARCH_INPUT_FOCUS_CHANGED,
+} from '@dcloudio/uni-shared'
 import { usePageMeta } from '../../setup/provide'
 import {
   usePageHeadTransparent,
   usePageHeadTransparentBackgroundColor,
 } from './transparent'
+import { parseTheme, useTheme } from '../../../helpers/theme'
 
 const ICON_PATHS = {
   none: '',
   forward:
     'M11 7.844q-0.25-0.219-0.25-0.578t0.25-0.578q0.219-0.25 0.563-0.25t0.563 0.25l9.656 9.125q0.125 0.125 0.188 0.297t0.063 0.328q0 0.188-0.063 0.359t-0.188 0.297l-9.656 9.125q-0.219 0.25-0.563 0.25t-0.563-0.25q-0.25-0.219-0.25-0.578t0.25-0.609l9.063-8.594-9.063-8.594z',
   back: ICON_PATH_BACK,
+  select: ICON_PATH_BACK,
   share:
     'M26.563 24.844q0 0.125-0.109 0.234t-0.234 0.109h-17.938q-0.125 0-0.219-0.109t-0.094-0.234v-13.25q0-0.156 0.094-0.25t0.219-0.094h5.5v-1.531h-6q-0.531 0-0.906 0.391t-0.375 0.922v14.375q0 0.531 0.375 0.922t0.906 0.391h18.969q0.531 0 0.891-0.391t0.359-0.953v-5.156h-1.438v4.625zM29.813 10.969l-5.125-5.375-1.031 1.094 3.438 3.594-3.719 0.031q-2.313 0.188-4.344 1.125t-3.578 2.422-2.5 3.453-1.109 4.188l-0.031 0.25h1.469v-0.219q0.156-1.875 1-3.594t2.25-3.063 3.234-2.125 3.828-0.906l0.188-0.031 3.313-0.031-3.438 3.625 1.031 1.063 5.125-5.375-0.031-0.063 0.031-0.063z',
   favorite:
@@ -35,7 +44,11 @@ export default /*#__PURE__*/ defineSystemComponent({
   setup() {
     const headRef = ref(null)
     const pageMeta = usePageMeta()
-    const navigationBar = pageMeta.navigationBar
+    const navigationBar = useTheme(pageMeta.navigationBar, () => {
+      const _navigationBar = parseTheme(pageMeta.navigationBar)
+      navigationBar.backgroundColor = _navigationBar.backgroundColor
+      navigationBar.titleColor = _navigationBar.titleColor
+    })
     // UniServiceJSBridge.emit('onNavigationBarChange', navigationBar.titleText)
     const { clazz, style } = usePageHead(navigationBar)
 
@@ -53,7 +66,7 @@ export default /*#__PURE__*/ defineSystemComponent({
     return () => {
       // 单页面无需back按钮
       const backButtonTsx = __UNI_FEATURE_PAGES__
-        ? createBackButtonTsx(pageMeta)
+        ? createBackButtonTsx(navigationBar, pageMeta.isQuit)
         : null
       const leftButtonsTsx = __UNI_FEATURE_NAVIGATIONBAR_BUTTONS__
         ? createButtonsTsx(buttons.left)
@@ -87,8 +100,10 @@ export default /*#__PURE__*/ defineSystemComponent({
   },
 })
 
-function createBackButtonTsx(pageMeta: UniApp.PageRouteMeta) {
-  const { navigationBar, isQuit } = pageMeta
+function createBackButtonTsx(
+  navigationBar: UniApp.PageNavigationBar,
+  isQuit?: Boolean
+) {
   if (!isQuit) {
     return (
       <div class="uni-page-head-btn" onClick={onPageHeadBackButton}>
@@ -97,7 +112,7 @@ function createBackButtonTsx(pageMeta: UniApp.PageRouteMeta) {
           navigationBar.type === 'transparent'
             ? '#fff'
             : navigationBar.titleColor!,
-          27
+          26
         )}
       </div>
     )
@@ -115,6 +130,7 @@ function createButtonsTsx(btns: PageHeadButton[]) {
         btnIconPath,
         badgeText,
         iconStyle,
+        btnSelect,
       },
       index
     ) => {
@@ -128,6 +144,11 @@ function createButtonsTsx(btns: PageHeadButton[]) {
         >
           {btnIconPath ? (
             createSvgIconVNode(btnIconPath, iconStyle.color, iconStyle.fontSize)
+          ) : btnSelect ? (
+            <span style={iconStyle}>
+              <i class="uni-btn-icon" v-html={btnText} />
+              {createSvgIconVNode(ICON_PATHS['select'], '#000', 14)}
+            </span>
           ) : (
             <i class="uni-btn-icon" style={iconStyle} v-html={btnText} />
           )}
@@ -184,7 +205,7 @@ function createPageHeadSearchInputTsx(
     onBlur,
     onFocus,
     onInput,
-    onKeyup,
+    onConfirm,
     onClick,
   }: PageHeadSearchInput
 ) {
@@ -235,7 +256,7 @@ function createPageHeadSearchInputTsx(
           onFocus={onFocus}
           onBlur={onBlur}
           onInput={onInput}
-          onKeyup={onKeyup}
+          onConfirm={onConfirm}
         />
       )}
     </div>
@@ -340,26 +361,39 @@ function usePageHeadButton(
   if (btn.fontFamily) {
     iconStyle.fontFamily = btn.fontFamily
   }
-  return {
-    btnClass: {
-      // 类似这样的大量重复的字符串，会在gzip时压缩大小，无需在代码层考虑优化相同字符串
-      'uni-page-head-btn': true,
-      'uni-page-head-btn-red-dot': !!(btn.redDot || btn.badgeText),
-      'uni-page-head-btn-select': !!btn.select,
+  return new Proxy(
+    {
+      btnClass: {
+        // 类似这样的大量重复的字符串，会在gzip时压缩大小，无需在代码层考虑优化相同字符串
+        'uni-page-head-btn': true,
+        'uni-page-head-btn-red-dot': !!(btn.redDot || btn.badgeText),
+        'uni-page-head-btn-select': !!btn.select,
+      },
+      btnStyle: {
+        backgroundColor: isTransparent ? btn.background : 'transparent',
+        width: btn.width,
+      },
+      btnText: '',
+      btnIconPath: ICON_PATHS[btn.type],
+      badgeText: btn.badgeText,
+      iconStyle,
+      onClick() {
+        invokeHook(pageId, ON_NAVIGATION_BAR_BUTTON_TAP, extend({ index }, btn))
+      },
+      btnSelect: btn.select,
     },
-    btnStyle: {
-      backgroundColor: isTransparent ? btn.background : 'transparent',
-      width: btn.width,
-    },
-    btnText:
-      btn.fontSrc && btn.fontFamily ? btn.text.replace('\\u', '&#x') : btn.text,
-    btnIconPath: ICON_PATHS[btn.type],
-    badgeText: btn.badgeText,
-    iconStyle,
-    onClick() {
-      invokeHook(pageId, 'onNavigationBarButtonTap', extend({ index }, btn))
-    },
-  }
+    {
+      get(target, key, receiver) {
+        if (['btnText'].includes(key as string)) {
+          return btn.fontSrc && btn.fontFamily
+            ? btn.text.replace('\\u', '&#x')
+            : btn.text
+        } else {
+          return Reflect.get(target, key, receiver)
+        }
+      },
+    }
+  )
 }
 
 type PageHeadSearchInput = ReturnType<typeof usePageHeadSearchInput>
@@ -374,7 +408,7 @@ function usePageHeadSearchInput({
   const { disabled } = searchInput!
   if (disabled) {
     const onClick = () => {
-      invokeHook(id!, 'onNavigationBarSearchInputClicked')
+      invokeHook(id!, ON_NAVIGATION_BAR_SEARCH_INPUT_CLICKED)
     }
     return {
       focus,
@@ -385,22 +419,26 @@ function usePageHeadSearchInput({
   }
   const onFocus = () => {
     focus.value = true
-    invokeHook(id!, 'onNavigationBarSearchInputFocusChanged', { focus: true })
+    invokeHook(id!, ON_NAVIGATION_BAR_SEARCH_INPUT_FOCUS_CHANGED, {
+      focus: true,
+    })
   }
   const onBlur = () => {
     focus.value = false
-    invokeHook(id!, 'onNavigationBarSearchInputFocusChanged', { focus: false })
+    invokeHook(id!, ON_NAVIGATION_BAR_SEARCH_INPUT_FOCUS_CHANGED, {
+      focus: false,
+    })
   }
   const onInput = (evt: { detail: { value: string } }) => {
     text.value = evt.detail.value
-    invokeHook(id!, 'onNavigationBarSearchInputChanged', { text: text.value })
+    invokeHook(id!, ON_NAVIGATION_BAR_SEARCH_INPUT_CHANGED, {
+      text: text.value,
+    })
   }
-  const onKeyup = (evt: KeyboardEvent) => {
-    if (evt.key === 'Enter' || evt.keyCode === 13) {
-      invokeHook(id!, 'onNavigationBarSearchInputConfirmed', {
-        text: text.value,
-      })
-    }
+  const onConfirm = (evt: KeyboardEvent) => {
+    invokeHook(id!, ON_NAVIGATION_BAR_SEARCH_INPUT_CONFIRMED, {
+      text: text.value,
+    })
   }
   return {
     focus,
@@ -409,6 +447,6 @@ function usePageHeadSearchInput({
     onFocus,
     onBlur,
     onInput,
-    onKeyup,
+    onConfirm,
   }
 }

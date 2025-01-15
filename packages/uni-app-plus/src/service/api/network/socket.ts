@@ -1,40 +1,31 @@
 import {
-  defineTaskApi,
+  API_CLOSE_SOCKET,
+  API_CONNECT_SOCKET,
+  API_SEND_SOCKET_MESSAGE,
+  type API_TYPE_CLOSE_SOCKET,
+  type API_TYPE_CONNECT_SOCKET,
+  type API_TYPE_SEND_SOCKET_MESSAGE,
+  CloseSocketProtocol,
+  ConnectSocketOptions,
+  ConnectSocketProtocol,
+  SendSocketMessageProtocol,
   defineAsyncApi,
   defineOnApi,
-  API_CONNECT_SOCKET,
-  API_TYPE_CONNECT_SOCKET,
-  ConnectSocketProtocol,
-  ConnectSocketOptions,
-  API_SEND_SOCKET_MESSAGE,
-  API_TYPE_SEND_SOCKET_MESSAGE,
-  SendSocketMessageProtocol,
-  API_CLOSE_SOCKET,
-  API_TYPE_CLOSE_SOCKET,
-  CloseSocketProtocol,
+  defineTaskApi,
 } from '@dcloudio/uni-api'
 import { requireNativePlugin } from '../plugin/requireNativePlugin'
-import { base64ToArrayBuffer, arrayBufferToBase64 } from '@dcloudio/uni-api'
-import { extend, capitalize } from '@vue/shared'
+import { arrayBufferToBase64, base64ToArrayBuffer } from '@dcloudio/uni-api'
+import { capitalize, extend, isArray, isFunction } from '@vue/shared'
 import { callOptions } from '@dcloudio/uni-shared'
 
+type MessageData = string | { '@type': string; base64: string }
+type OnMessageArgs = { id: string; message: MessageData; data: MessageData }
+
 type Socket = {
-  send: ({
-    data,
-  }: {
-    id: String
-    data:
-      | string
-      | {
-          '@type': String
-          base64: String
-        }
-  }) => void
+  send: ({ data }: { id: String; data: MessageData }) => void
   close: ({ code, reason }: { code?: number; reason?: string }) => void
   onopen: (cb: (args: { id: string }) => void) => void
-  onmessage: (
-    cb: (args: { id: string; message: string | Object }) => void
-  ) => void
+  onmessage: (cb: (args: OnMessageArgs) => void) => void
   onerror: (cb: (args: { id: string; message: string }) => void) => void
   onclose: (
     cb: (args: {
@@ -73,7 +64,7 @@ function createSocketTask(args: UniApp.ConnectSocketOption) {
     socket.WebSocket({
       id: socketId,
       url: args.url,
-      protocol: Array.isArray(args.protocols)
+      protocol: isArray(args.protocols)
         ? args.protocols.join(',')
         : args.protocols,
       header: args.header,
@@ -101,9 +92,10 @@ function bindSocketCallBack(socket: Socket) {
     curSocket._socketOnError()
   })
   socket.onclose((e) => {
-    const curSocket = socketsMap[e.id]
+    const { id, code, reason } = e
+    const curSocket = socketsMap[id]
     if (!curSocket) return
-    curSocket._socketOnClose()
+    curSocket._socketOnClose({ code, reason })
   })
 }
 
@@ -144,7 +136,7 @@ class SocketTask implements UniApp.SocketTask {
     this.socketStateChange('open')
   }
 
-  _socketOnMessage(e: any) {
+  _socketOnMessage(e: OnMessageArgs) {
     this.socketStateChange('message', {
       data:
         typeof e.data === 'object'
@@ -158,8 +150,8 @@ class SocketTask implements UniApp.SocketTask {
     this.onErrorOrClose()
   }
 
-  _socketOnClose() {
-    this.socketStateChange('close')
+  _socketOnClose(res: { code: number; reason: string }) {
+    this.socketStateChange('close', res)
     this.onErrorOrClose()
   }
 
@@ -173,7 +165,13 @@ class SocketTask implements UniApp.SocketTask {
   }
 
   socketStateChange(name: eventName, res: Data = {}) {
-    const data = name === 'message' ? res : {}
+    const { code, reason } = res
+    const data =
+      name === 'message'
+        ? { data: res.data }
+        : name === 'close'
+        ? { code, reason }
+        : {}
 
     if (this === socketTasks[0] && globalEvent[name]) {
       UniServiceJSBridge.invokeOnCallback(globalEvent[name], data)
@@ -181,7 +179,7 @@ class SocketTask implements UniApp.SocketTask {
 
     // WYQ fix: App平台修复websocket onOpen时发送数据报错的Bug
     this._callbacks[name].forEach((callback) => {
-      if (typeof callback === 'function') {
+      if (isFunction(callback)) {
         callback(data)
       }
     })

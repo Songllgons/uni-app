@@ -1,28 +1,48 @@
-import { App } from 'vue'
+import type { App } from 'vue'
 
 import { initApp } from '@dcloudio/uni-vue'
+import { pruneComponentPropsCache } from './helpers/renderProps'
 
 export default {
   install(app: App) {
     initApp(app)
 
-    // TODO 旧编译器使用了$createElement 导致告警，当切换到新编译器时，移除此类代码
-    app.config.globalProperties.$createElement = () => {}
+    app.config.globalProperties.pruneComponentPropsCache =
+      pruneComponentPropsCache
 
     const oldMount = app.mount
     app.mount = function mount(rootContainer: any) {
       const instance = oldMount.call(app, rootContainer)
-      if ((global as any).createApp) {
-        ;(global as any).createApp(instance)
+      const createApp = getCreateApp()
+      if (createApp) {
+        createApp(instance)
       } else {
-        // @ts-ignore 旧编译器
+        // @ts-expect-error 旧编译器
         if (typeof createMiniProgramApp !== 'undefined') {
-          // @ts-ignore
+          // @ts-expect-error
           createMiniProgramApp(instance)
         }
       }
-
       return instance
     }
   },
+}
+
+function getCreateApp() {
+  const method = process.env.UNI_MP_PLUGIN
+    ? 'createPluginApp'
+    : process.env.UNI_SUBPACKAGE
+    ? 'createSubpackageApp'
+    : 'createApp'
+  if (
+    typeof global !== 'undefined' &&
+    typeof (global as any)[method] !== 'undefined'
+  ) {
+    return (global as any)[method]
+    // @ts-expect-error
+  } else if (typeof my !== 'undefined') {
+    // 支付宝小程序开启globalObjectMode配置后才会有global
+    // @ts-expect-error
+    return (my as any)[method]
+  }
 }

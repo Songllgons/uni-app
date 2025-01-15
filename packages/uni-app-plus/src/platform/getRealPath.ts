@@ -1,5 +1,10 @@
 import { getCurrentPage, getRealRoute } from '@dcloudio/uni-core'
-import { DATA_RE, SCHEME_RE, cacheStringFunction } from '@dcloudio/uni-shared'
+import {
+  DATA_RE,
+  SCHEME_RE,
+  addLeadingSlash,
+  cacheStringFunction,
+} from '@dcloudio/uni-shared'
 export function getRealPath(filepath: string) {
   // 无协议的情况补全 https
   if (filepath.indexOf('//') === 0) {
@@ -30,14 +35,14 @@ export function getRealPath(filepath: string) {
   }
   // 相对资源
   if (filepath.indexOf('../') === 0 || filepath.indexOf('./') === 0) {
-    // @ts-expect-error app-view
+    // app-view
     if (typeof __id__ === 'string') {
-      // @ts-expect-error app-view
-      return wwwPath + getRealRoute('/' + __id__, filepath)
+      // app-view
+      return wwwPath + getRealRoute(addLeadingSlash(__id__), filepath)
     } else {
       const page = getCurrentPage()
       if (page) {
-        return wwwPath + getRealRoute('/' + page.route, filepath)
+        return wwwPath + getRealRoute(addLeadingSlash(page.route!), filepath)
       }
     }
   }

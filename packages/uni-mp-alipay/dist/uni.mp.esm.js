@@ -1,135 +1,7 @@
-import { isPlainObject, isArray, extend, hyphenate, isObject, hasOwn, toNumber, capitalize, isFunction, NOOP, EMPTY_OBJ, camelize } from '@vue/shared';
-import { onUnmounted, injectHook, ref } from 'vue';
-
-const encode = encodeURIComponent;
-function stringifyQuery(obj, encodeStr = encode) {
-    const res = obj
-        ? Object.keys(obj)
-            .map((key) => {
-            let val = obj[key];
-            if (typeof val === undefined || val === null) {
-                val = '';
-            }
-            else if (isPlainObject(val)) {
-                val = JSON.stringify(val);
-            }
-            return encodeStr(key) + '=' + encodeStr(val);
-        })
-            .filter((x) => x.length > 0)
-            .join('&')
-        : null;
-    return res ? `?${res}` : '';
-}
-
-function cache(fn) {
-    const cache = Object.create(null);
-    return (str) => {
-        const hit = cache[str];
-        return hit || (cache[str] = fn(str));
-    };
-}
-const invokeArrayFns = (fns, arg) => {
-    let ret;
-    for (let i = 0; i < fns.length; i++) {
-        ret = fns[i](arg);
-    }
-    return ret;
-};
-// lifecycle
-// App and Page
-const ON_SHOW = 'onShow';
-const ON_HIDE = 'onHide';
-//App
-const ON_LAUNCH = 'onLaunch';
-const ON_ERROR = 'onError';
-const ON_THEME_CHANGE = 'onThemeChange';
-const ON_PAGE_NOT_FOUND = 'onPageNotFound';
-const ON_UNHANDLE_REJECTION = 'onUnhandledRejection';
-//Page
-const ON_LOAD = 'onLoad';
-const ON_READY = 'onReady';
-const ON_UNLOAD = 'onUnload';
-const ON_RESIZE = 'onResize';
-const ON_BACK_PRESS = 'onBackPress';
-const ON_TAB_ITEM_TAP = 'onTabItemTap';
-const ON_REACH_BOTTOM = 'onReachBottom';
-const ON_PULL_DOWN_REFRESH = 'onPullDownRefresh';
-const ON_ADD_TO_FAVORITES = 'onAddToFavorites';
-const ON_SHARE_APP_MESSAGE = 'onShareAppMessage';
-
-class EventChannel {
-    constructor(id, events) {
-        this.id = id;
-        this.listener = {};
-        this.emitCache = {};
-        if (events) {
-            Object.keys(events).forEach((name) => {
-                this.on(name, events[name]);
-            });
-        }
-    }
-    emit(eventName, ...args) {
-        const fns = this.listener[eventName];
-        if (!fns) {
-            return (this.emitCache[eventName] || (this.emitCache[eventName] = [])).push(args);
-        }
-        fns.forEach((opt) => {
-            opt.fn.apply(opt.fn, args);
-        });
-        this.listener[eventName] = fns.filter((opt) => opt.type !== 'once');
-    }
-    on(eventName, fn) {
-        this._addListener(eventName, 'on', fn);
-        this._clearCache(eventName);
-    }
-    once(eventName, fn) {
-        this._addListener(eventName, 'once', fn);
-        this._clearCache(eventName);
-    }
-    off(eventName, fn) {
-        const fns = this.listener[eventName];
-        if (!fns) {
-            return;
-        }
-        if (fn) {
-            for (let i = 0; i < fns.length;) {
-                if (fns[i].fn === fn) {
-                    fns.splice(i, 1);
-                    i--;
-                }
-                i++;
-            }
-        }
-        else {
-            delete this.listener[eventName];
-        }
-    }
-    _clearCache(eventName) {
-        const cacheArgs = this.emitCache[eventName];
-        if (cacheArgs) {
-            for (; cacheArgs.length > 0;) {
-                this.emit.apply(this, [eventName, ...cacheArgs.shift()]);
-            }
-        }
-    }
-    _addListener(eventName, type, fn) {
-        (this.listener[eventName] || (this.listener[eventName] = [])).push({
-            fn,
-            type,
-        });
-    }
-}
-
-const eventChannels = {};
-const eventChannelStack = [];
-function getEventChannel(id) {
-    if (id) {
-        const eventChannel = eventChannels[id];
-        delete eventChannels[id];
-        return eventChannel;
-    }
-    return eventChannelStack.shift();
-}
+import { VIRTUAL_HOST_ID, SLOT_DEFAULT_NAME, EventChannel, invokeArrayFns, MINI_PROGRAM_PAGE_RUNTIME_HOOKS, ON_LOAD, ON_SHOW, ON_HIDE, ON_UNLOAD, ON_RESIZE, ON_TAB_ITEM_TAP, ON_REACH_BOTTOM, ON_PULL_DOWN_REFRESH, ON_ADD_TO_FAVORITES, isUniLifecycleHook, ON_READY, ON_LAUNCH, ON_ERROR, ON_THEME_CHANGE, ON_PAGE_NOT_FOUND, ON_UNHANDLE_REJECTION, VIRTUAL_HOST_STYLE, VIRTUAL_HOST_CLASS, VIRTUAL_HOST_HIDDEN, customizeEvent, addLeadingSlash, stringifyQuery, ON_BACK_PRESS } from '@dcloudio/uni-shared';
+import { isArray, isFunction, capitalize, hasOwn, extend, isPlainObject, isString } from '@vue/shared';
+import { injectHook, ref, findComponentPropsData, toRaw, updateProps, hasQueueJob, invalidateJob, getExposeProxy, EMPTY_OBJ, isRef, setTemplateRef, devtoolsComponentAdded, pruneComponentPropsCache } from 'vue';
+import { normalizeLocale, LOCALE_EN } from '@dcloudio/uni-i18n';
 
 function initVueIds(vueIds, mpInstance) {
     if (!vueIds) {
@@ -174,170 +46,7 @@ function findVmByVueId(instance, vuePid) {
         }
     }
 }
-function getTarget(obj, path) {
-    const parts = path.split('.');
-    let key = parts[0];
-    if (key.indexOf('__$n') === 0) {
-        //number index
-        key = parseInt(key.replace('__$n', ''));
-    }
-    if (!obj) {
-        obj = {};
-    }
-    if (parts.length === 1) {
-        return obj[key];
-    }
-    return getTarget(obj[key], parts.slice(1).join('.'));
-}
 
-function getValue(dataPath, target) {
-    return getTarget(target || this, dataPath);
-}
-function getClass(dynamicClass, staticClass) {
-    return renderClass(staticClass, dynamicClass);
-}
-function getStyle(dynamicStyle, staticStyle) {
-    if (!dynamicStyle && !staticStyle) {
-        return '';
-    }
-    var dynamicStyleObj = normalizeStyleBinding(dynamicStyle);
-    var styleObj = staticStyle
-        ? extend(staticStyle, dynamicStyleObj)
-        : dynamicStyleObj;
-    return Object.keys(styleObj)
-        .map(function (name) {
-        return hyphenate(name) + ':' + styleObj[name];
-    })
-        .join(';');
-}
-function toObject(arr) {
-    var res = {};
-    for (var i = 0; i < arr.length; i++) {
-        if (arr[i]) {
-            extend(res, arr[i]);
-        }
-    }
-    return res;
-}
-function normalizeStyleBinding(bindingStyle) {
-    if (Array.isArray(bindingStyle)) {
-        return toObject(bindingStyle);
-    }
-    if (typeof bindingStyle === 'string') {
-        return parseStyleText(bindingStyle);
-    }
-    return bindingStyle;
-}
-var parseStyleText = cache(function parseStyleText(cssText) {
-    var res = {};
-    var listDelimiter = /;(?![^(]*\))/g;
-    var propertyDelimiter = /:(.+)/;
-    cssText.split(listDelimiter).forEach(function (item) {
-        if (item) {
-            var tmp = item.split(propertyDelimiter);
-            tmp.length > 1 && (res[tmp[0].trim()] = tmp[1].trim());
-        }
-    });
-    return res;
-});
-function isDef(v) {
-    return v !== undefined && v !== null;
-}
-function renderClass(staticClass, dynamicClass) {
-    if (isDef(staticClass) || isDef(dynamicClass)) {
-        return concat(staticClass, stringifyClass(dynamicClass));
-    }
-    /* istanbul ignore next */
-    return '';
-}
-function concat(a, b) {
-    return a ? (b ? a + ' ' + b : a) : b || '';
-}
-function stringifyClass(value) {
-    if (Array.isArray(value)) {
-        return stringifyArray(value);
-    }
-    if (isObject(value)) {
-        return stringifyObject(value);
-    }
-    if (typeof value === 'string') {
-        return value;
-    }
-    /* istanbul ignore next */
-    return '';
-}
-function stringifyArray(value) {
-    var res = '';
-    var stringified;
-    for (var i = 0, l = value.length; i < l; i++) {
-        if (isDef((stringified = stringifyClass(value[i]))) && stringified !== '') {
-            if (res) {
-                res += ' ';
-            }
-            res += stringified;
-        }
-    }
-    return res;
-}
-function stringifyObject(value) {
-    var res = '';
-    for (var key in value) {
-        if (value[key]) {
-            if (res) {
-                res += ' ';
-            }
-            res += key;
-        }
-    }
-    return res;
-}
-
-function setModel(target, key, value, modifiers) {
-    if (isArray(modifiers)) {
-        if (modifiers.indexOf('trim') !== -1) {
-            value = value.trim();
-        }
-        if (modifiers.indexOf('number') !== -1) {
-            value = toNumber(value);
-        }
-    }
-    if (!target) {
-        target = this;
-    }
-    target[key] = value;
-}
-function setSync(target, key, value) {
-    if (!target) {
-        target = this;
-    }
-    target[key] = value;
-}
-function getOrig(data) {
-    if (isPlainObject(data)) {
-        return data.$orig || data;
-    }
-    return data;
-}
-function map(val, iteratee) {
-    let ret, i, l, keys, key;
-    if (isArray(val)) {
-        ret = new Array(val.length);
-        for (i = 0, l = val.length; i < l; i++) {
-            ret[i] = iteratee(val[i], i);
-        }
-        return ret;
-    }
-    else if (isObject(val)) {
-        keys = Object.keys(val);
-        ret = Object.create(null);
-        for (i = 0, l = keys.length; i < l; i++) {
-            key = keys[i];
-            ret[key] = iteratee(val[key], key, i);
-        }
-        return ret;
-    }
-    return [];
-}
 const MP_METHODS = [
     'createSelectorQuery',
     'createIntersectionObserver',
@@ -346,12 +55,15 @@ const MP_METHODS = [
 ];
 function createEmitFn(oldEmit, ctx) {
     return function emit(event, ...args) {
-        if (ctx.$scope && event) {
-            ctx.$scope.triggerEvent(event, { __args__: args });
+        const scope = ctx.$scope;
+        if (scope && event) {
+            const detail = { __args__: args };
+            {
+                scope.triggerEvent(event, detail);
+            }
         }
         {
-            const vnode = this.$.vnode;
-            const props = vnode && vnode.props;
+            const props = scope.props;
             if (props && props[`on${capitalize(event)}`]) {
                 return;
             }
@@ -364,23 +76,37 @@ function initBaseInstance(instance, options) {
     // mp
     ctx.mpType = options.mpType; // @deprecated
     ctx.$mpType = options.mpType;
-    ctx.$scope = options.mpInstance;
+    ctx.$mpPlatform = "mp-alipay";
+    const $scope = (ctx.$scope = options.mpInstance);
+    // mergeVirtualHostAttributes
+    Object.defineProperties(ctx, {
+        // only id
+        [VIRTUAL_HOST_ID]: {
+            get() {
+                return $scope.data[VIRTUAL_HOST_ID];
+            },
+        },
+    });
     // TODO @deprecated
     ctx.$mp = {};
     if (__VUE_OPTIONS_API__) {
         ctx._self = {};
     }
-    // $vm
-    ctx.$scope.$vm = instance.proxy;
     // slots
-    {
-        Object.defineProperty(instance, 'slots', {
-            get() {
-                return this.$scope && this.$scope.props.$slots;
-            },
+    instance.slots = {};
+    if (isArray(options.slots) && options.slots.length) {
+        options.slots.forEach((name) => {
+            instance.slots[name] = true;
         });
+        if (instance.slots[SLOT_DEFAULT_NAME]) {
+            instance.slots.default = true;
+        }
     }
     ctx.getOpenerEventChannel = function () {
+        {
+            if (my.canIUse('getOpenerEventChannel'))
+                return options.mpInstance.getOpenerEventChannel();
+        }
         if (!this.__eventChannel__) {
             this.__eventChannel__ = new EventChannel();
         }
@@ -393,9 +119,6 @@ function initBaseInstance(instance, options) {
 }
 function initComponentInstance(instance, options) {
     initBaseInstance(instance, options);
-    {
-        initScopedSlotsParams(instance);
-    }
     const ctx = instance.ctx;
     MP_METHODS.forEach((method) => {
         ctx[method] = function (...args) {
@@ -408,21 +131,12 @@ function initComponentInstance(instance, options) {
             }
         };
     });
-    // TODO other
-    ctx.__set_model = setModel;
-    ctx.__set_sync = setSync;
-    ctx.__get_orig = getOrig;
-    // TODO
-    ctx.__get_value = getValue;
-    ctx.__get_class = getClass;
-    ctx.__get_style = getStyle;
-    ctx.__map = map;
 }
 function initMocks(instance, mpInstance, mocks) {
     const ctx = instance.ctx;
     mocks.forEach((mock) => {
         if (hasOwn(mpInstance, mock)) {
-            ctx[mock] = mpInstance[mock];
+            instance[mock] = ctx[mock] = mpInstance[mock];
         }
     });
 }
@@ -439,62 +153,20 @@ function callHook(name, args) {
         this.$.isMounted = true;
         name = 'm';
     }
-    else if (name === 'onLoad' && args && args.__id__) {
-        this.__eventChannel__ = getEventChannel(args.__id__);
-        delete args.__id__;
+    {
+        if (name === 'onLoad' &&
+            args &&
+            args.__id__ &&
+            isFunction(my.getEventChannel)) {
+            this.__eventChannel__ = my.getEventChannel(args.__id__);
+            delete args.__id__;
+        }
     }
     const hooks = this.$[name];
     return hooks && invokeArrayFns(hooks, args);
 }
-const center = {};
-const parents = {};
-function initScopedSlotsParams(instance) {
-    const ctx = instance.ctx;
-    ctx.$hasScopedSlotsParams = function (vueId) {
-        const has = center[vueId];
-        if (!has) {
-            parents[vueId] = this;
-            onUnmounted(() => {
-                delete parents[vueId];
-            }, instance);
-        }
-        return has;
-    };
-    ctx.$getScopedSlotsParams = function (vueId, name, key) {
-        const data = center[vueId];
-        if (data) {
-            const object = data[name] || {};
-            return key ? object[key] : object;
-        }
-        else {
-            parents[vueId] = this;
-            onUnmounted(() => {
-                delete parents[vueId];
-            }, instance);
-        }
-    };
-    ctx.$setScopedSlotsParams = function (name, value) {
-        const vueIds = instance.attrs.vueId;
-        if (vueIds) {
-            const vueId = vueIds.split(',')[0];
-            const object = (center[vueId] = center[vueId] || {});
-            object[name] = value;
-            if (parents[vueId]) {
-                parents[vueId].$forceUpdate();
-            }
-        }
-    };
-    onUnmounted(function () {
-        const propsData = instance.attrs;
-        const vueId = propsData && propsData.vueId;
-        if (vueId) {
-            delete center[vueId];
-            delete parents[vueId];
-        }
-    }, instance);
-}
 
-const PAGE_HOOKS = [
+const PAGE_INIT_HOOKS = [
     ON_LOAD,
     ON_SHOW,
     ON_HIDE,
@@ -512,7 +184,7 @@ const PAGE_HOOKS = [
 function findHooks(vueOptions, hooks = new Set()) {
     if (vueOptions) {
         Object.keys(vueOptions).forEach((name) => {
-            if (name.indexOf('on') === 0 && isFunction(vueOptions[name])) {
+            if (isUniLifecycleHook(name, vueOptions[name])) {
                 hooks.add(name);
             }
         });
@@ -542,11 +214,15 @@ function initHooks(mpOptions, hooks, excludes = EXCLUDE_HOOKS) {
 function initUnknownHooks(mpOptions, vueOptions, excludes = EXCLUDE_HOOKS) {
     findHooks(vueOptions).forEach((hook) => initHook(mpOptions, hook, excludes));
 }
-
-my.appLaunchHooks = [];
-function injectAppLaunchHooks(appInstance) {
-    my.appLaunchHooks.forEach((hook) => {
-        injectHook(ON_LAUNCH, hook, appInstance);
+function initRuntimeHooks(mpOptions, runtimeHooks) {
+    if (!runtimeHooks) {
+        return;
+    }
+    const hooks = Object.keys(MINI_PROGRAM_PAGE_RUNTIME_HOOKS);
+    hooks.forEach((hook) => {
+        if (runtimeHooks & MINI_PROGRAM_PAGE_RUNTIME_HOOKS[hook]) {
+            initHook(mpOptions, hook, []);
+        }
     });
 }
 
@@ -558,18 +234,25 @@ const HOOKS = [
     ON_PAGE_NOT_FOUND,
     ON_UNHANDLE_REJECTION,
 ];
-{
-    HOOKS.push(ON_SHARE_APP_MESSAGE);
-}
 function parseApp(instance, parseAppOptions) {
     const internalInstance = instance.$;
+    if (__VUE_PROD_DEVTOOLS__) {
+        // 定制 App 的 $children
+        Object.defineProperty(internalInstance.ctx, '$children', {
+            get() {
+                return getCurrentPages().map((page) => page.$vm);
+            },
+        });
+    }
     const appOptions = {
         globalData: (instance.$options && instance.$options.globalData) || {},
-        $vm: instance,
+        $vm: instance, // mp-alipay 组件 data 初始化比 onLaunch 早，提前挂载
         onLaunch(options) {
+            this.$vm = instance; // 飞书小程序可能会把 AppOptions 序列化，导致 $vm 对象部分属性丢失
             const ctx = internalInstance.ctx;
-            if (this.$vm && ctx.$scope) {
+            if (this.$vm && ctx.$scope && ctx.$callHook) {
                 // 已经初始化过了，主要是为了百度，百度 onShow 在 onLaunch 之前
+                // $scope值在微信小程序混合分包情况下存在，额外用$callHook兼容判断处理
                 return;
             }
             initBaseInstance(internalInstance, {
@@ -577,11 +260,17 @@ function parseApp(instance, parseAppOptions) {
                 mpInstance: this,
                 slots: [],
             });
-            injectAppLaunchHooks(internalInstance);
             ctx.globalData = this.globalData;
-            instance.$callHook(ON_LAUNCH, extend({ app: this }, options));
+            instance.$callHook(ON_LAUNCH, options);
         },
     };
+    const onErrorHandlers = my.$onErrorHandlers;
+    if (onErrorHandlers) {
+        onErrorHandlers.forEach((fn) => {
+            injectHook(ON_ERROR, fn, internalInstance);
+        });
+        onErrorHandlers.length = 0;
+    }
     initLocale(instance);
     const vueOptions = instance.$.type;
     initHooks(appOptions, HOOKS);
@@ -600,8 +289,55 @@ function initCreateApp(parseAppOptions) {
         return App(parseApp(vm, parseAppOptions));
     };
 }
+function initCreateSubpackageApp(parseAppOptions) {
+    return function createApp(vm) {
+        const appOptions = parseApp(vm, parseAppOptions);
+        const app = isFunction(getApp) &&
+            getApp({
+                allowDefault: true,
+            });
+        if (!app)
+            return;
+        vm.$.ctx.$scope = app;
+        const globalData = app.globalData;
+        if (globalData) {
+            Object.keys(appOptions.globalData).forEach((name) => {
+                if (!hasOwn(globalData, name)) {
+                    globalData[name] = appOptions.globalData[name];
+                }
+            });
+        }
+        Object.keys(appOptions).forEach((name) => {
+            if (!hasOwn(app, name)) {
+                app[name] = appOptions[name];
+            }
+        });
+        initAppLifecycle(appOptions, vm);
+        if (process.env.UNI_SUBPACKAGE) {
+            (my.$subpackages || (my.$subpackages = {}))[process.env.UNI_SUBPACKAGE] = {
+                $vm: vm,
+            };
+        }
+    };
+}
+function initAppLifecycle(appOptions, vm) {
+    if (isFunction(appOptions.onLaunch)) {
+        const args = my.getLaunchOptionsSync && my.getLaunchOptionsSync();
+        appOptions.onLaunch(args);
+    }
+    if (isFunction(appOptions.onShow) && my.onAppShow) {
+        my.onAppShow((args) => {
+            vm.$callHook('onShow', args);
+        });
+    }
+    if (isFunction(appOptions.onHide) && my.onAppHide) {
+        my.onAppHide((args) => {
+            vm.$callHook('onHide', args);
+        });
+    }
+}
 function initLocale(appVm) {
-    const locale = ref(my.getSystemInfoSync().language || 'zh-Hans');
+    const locale = ref(normalizeLocale(my.getSystemInfoSync().language) || LOCALE_EN);
     Object.defineProperty(appVm, '$locale', {
         get() {
             return locale.value;
@@ -612,109 +348,165 @@ function initLocale(appVm) {
     });
 }
 
-const PROP_TYPES = [String, Number, Boolean, Object, Array, null];
-function parsePropType(key, type, defaultValue) {
-    // [String]=>String
-    if (isArray(type) && type.length === 1) {
-        return type[0];
-    }
-    return type;
-}
-function initDefaultProps(isBehavior = false) {
+const builtInProps = [
+    // 百度小程序,快手小程序自定义组件不支持绑定动态事件，动态dataset，故通过props传递事件信息
+    // event-opts
+    'eO',
+    // 组件 ref
+    'uR',
+    // 组件 ref-in-for
+    'uRIF',
+    // 组件 id
+    'uI',
+    // 组件类型 m: 小程序组件
+    'uT',
+    // 组件 props
+    'uP',
+    // 小程序不能直接定义 $slots 的 props，所以通过 vueSlots 转换到 $slots
+    'uS',
+];
+function initDefaultProps(options, isBehavior = false) {
     const properties = {};
     if (!isBehavior) {
-        properties.vueId = {
-            type: String,
-            value: '',
-        };
+        // 均不指定类型，避免微信小程序 property received type-uncompatible value 警告
+        builtInProps.forEach((name) => {
+            properties[name] = {
+                type: null,
+                value: '',
+            };
+        });
         // 小程序不能直接定义 $slots 的 props，所以通过 vueSlots 转换到 $slots
-        properties.vueSlots = {
-            type: null,
-            value: [],
-            observer: function (newVal) {
-                const $slots = Object.create(null);
+        function observerSlots(newVal) {
+            const $slots = Object.create(null);
+            newVal &&
                 newVal.forEach((slotName) => {
                     $slots[slotName] = true;
                 });
-                this.setData({
-                    $slots,
-                });
-            },
+            this.setData({
+                $slots,
+            });
+        }
+        properties.uS = {
+            type: null,
+            value: [],
         };
+        {
+            properties.uS.observer = observerSlots;
+        }
+    }
+    if (options.behaviors) {
+        // wx://form-field
+        if (options.behaviors.includes('my' + '://form-field')) {
+            if (!options.properties || !options.properties.name) {
+                properties.name = {
+                    type: null,
+                    value: '',
+                };
+            }
+            if (!options.properties || !options.properties.value) {
+                properties.value = {
+                    type: null,
+                    value: '',
+                };
+            }
+        }
     }
     return properties;
 }
-function createProperty(key, prop) {
+function initVirtualHostProps(options) {
+    const properties = {};
     {
-        return prop;
-    }
-}
-function initProps(mpComponentOptions, rawProps, isBehavior = false) {
-    const properties = initDefaultProps(isBehavior);
-    if (isArray(rawProps)) {
-        rawProps.forEach((key) => {
-            properties[key] = createProperty(key, {
+        {
+            properties[VIRTUAL_HOST_STYLE] = {
                 type: null,
-            });
+                value: '',
+            };
+            properties[VIRTUAL_HOST_CLASS] = {
+                type: null,
+                value: '',
+            };
+            properties[VIRTUAL_HOST_HIDDEN] = {
+                type: null,
+                value: '',
+            };
+            properties[VIRTUAL_HOST_ID] = {
+                type: null,
+                value: '',
+            };
+        }
+    }
+    return properties;
+}
+/**
+ *
+ * @param mpComponentOptions
+ * @param isBehavior
+ */
+function initProps(mpComponentOptions) {
+    if (!mpComponentOptions.properties) {
+        mpComponentOptions.properties = {};
+    }
+    extend(mpComponentOptions.properties, initDefaultProps(mpComponentOptions), initVirtualHostProps());
+}
+function findPropsData(properties, isPage) {
+    return ((isPage
+        ? findPagePropsData(properties)
+        : findComponentPropsData(resolvePropValue(properties.uP))) || {});
+}
+function findPagePropsData(properties) {
+    const propsData = {};
+    if (isPlainObject(properties)) {
+        Object.keys(properties).forEach((name) => {
+            if (builtInProps.indexOf(name) === -1) {
+                propsData[name] = resolvePropValue(properties[name]);
+            }
         });
     }
-    else if (isPlainObject(rawProps)) {
-        Object.keys(rawProps).forEach((key) => {
-            const opts = rawProps[key];
-            if (isPlainObject(opts)) {
-                // title:{type:String,default:''}
-                let value = opts.default;
-                if (isFunction(value)) {
-                    value = value();
-                }
-                const type = opts.type;
-                opts.type = parsePropType(key, type);
-                properties[key] = createProperty(key, {
-                    type: PROP_TYPES.indexOf(type) !== -1 ? type : null,
-                    value,
-                });
-            }
-            else {
-                // content:String
-                const type = parsePropType(key, opts);
-                properties[key] = createProperty(key, {
-                    type: PROP_TYPES.indexOf(type) !== -1 ? type : null,
-                });
-            }
-        });
-    }
-    mpComponentOptions.properties = properties;
+    return propsData;
+}
+function resolvePropValue(prop) {
+    return prop;
 }
 
-function initData(vueOptions) {
-    let data = vueOptions.data || {};
-    if (typeof data === 'function') {
-        try {
-            const appConfig = getApp().$vm.$.appContext.config;
-            data = data.call(appConfig.globalProperties);
-        }
-        catch (e) {
-            if (process.env.VUE_APP_DEBUG) {
-                console.warn('根据 Vue 的 data 函数初始化小程序 data 失败，请尽量确保 data 函数中不访问 vm 对象，否则可能影响首次数据渲染速度。', data, e);
-            }
-        }
-    }
-    else {
-        try {
-            // 对 data 格式化
-            data = JSON.parse(JSON.stringify(data));
-        }
-        catch (e) { }
-    }
-    if (!isPlainObject(data)) {
-        data = {};
-    }
-    return data;
+function initData(_) {
+    return {};
 }
-function initBehaviors(vueOptions, initBehavior) {
+function updateMiniProgramComponentProperties(up, mpInstance) {
+    const prevProps = mpInstance.props
+        ;
+    const nextProps = findComponentPropsData(up) || {};
+    if (hasPropsChanged(prevProps, nextProps, false)) {
+        mpInstance.setData(nextProps);
+    }
+}
+function updateComponentProps(up, instance) {
+    const prevProps = toRaw(instance.props);
+    const nextProps = findComponentPropsData(up) || {};
+    if (hasPropsChanged(prevProps, nextProps)) {
+        updateProps(instance, nextProps, prevProps, false);
+        if (hasQueueJob(instance.update)) {
+            invalidateJob(instance.update);
+        }
+        {
+            instance.update();
+        }
+    }
+}
+function hasPropsChanged(prevProps, nextProps, checkLen = true) {
+    const nextKeys = Object.keys(nextProps);
+    if (checkLen && nextKeys.length !== Object.keys(prevProps).length) {
+        return true;
+    }
+    for (let i = 0; i < nextKeys.length; i++) {
+        const key = nextKeys[i];
+        if (nextProps[key] !== prevProps[key]) {
+            return true;
+        }
+    }
+    return false;
+}
+function initBehaviors(vueOptions) {
     const vueBehaviors = vueOptions.behaviors;
-    const vueExtends = vueOptions.extends;
-    const vueMixins = vueOptions.mixins;
     let vueProps = vueOptions.props;
     if (!vueProps) {
         vueOptions.props = vueProps = [];
@@ -722,18 +514,19 @@ function initBehaviors(vueOptions, initBehavior) {
     const behaviors = [];
     if (isArray(vueBehaviors)) {
         vueBehaviors.forEach((behavior) => {
-            behaviors.push(behavior.replace('uni://', `${__PLATFORM_PREFIX__}://`));
+            // 这里的 global 应该是个变量
+            behaviors.push(behavior.replace('uni://', 'my' + '://'));
             if (behavior === 'uni://form-field') {
                 if (isArray(vueProps)) {
                     vueProps.push('name');
-                    vueProps.push('value');
+                    vueProps.push('modelValue');
                 }
                 else {
                     vueProps.name = {
                         type: String,
                         default: '',
                     };
-                    vueProps.value = {
+                    vueProps.modelValue = {
                         type: [String, Number, Boolean, Array, Object, Date],
                         default: '',
                     };
@@ -741,331 +534,42 @@ function initBehaviors(vueOptions, initBehavior) {
             }
         });
     }
-    if (vueExtends && vueExtends.props) {
-        const behavior = {};
-        initProps(behavior, vueExtends.props, true);
-        behaviors.push(initBehavior(behavior));
-    }
-    if (isArray(vueMixins)) {
-        vueMixins.forEach((vueMixin) => {
-            if (vueMixin.props) {
-                const behavior = {};
-                initProps(behavior, vueMixin.props, true);
-                behaviors.push(initBehavior(behavior));
-            }
-        });
-    }
     return behaviors;
-}
-
-function getExtraValue(instance, dataPathsArray) {
-    let context = instance;
-    dataPathsArray.forEach((dataPathArray) => {
-        const dataPath = dataPathArray[0];
-        const value = dataPathArray[2];
-        if (dataPath || typeof value !== 'undefined') {
-            // ['','',index,'disable']
-            const propPath = dataPathArray[1];
-            const valuePath = dataPathArray[3];
-            let vFor;
-            if (Number.isInteger(dataPath)) {
-                vFor = dataPath;
-            }
-            else if (!dataPath) {
-                vFor = context;
-            }
-            else if (typeof dataPath === 'string' && dataPath) {
-                if (dataPath.indexOf('#s#') === 0) {
-                    vFor = dataPath.substr(3);
-                }
-                else {
-                    vFor = getTarget(context, dataPath);
-                }
-            }
-            if (Number.isInteger(vFor)) {
-                context = value;
-            }
-            else if (!propPath) {
-                context = vFor[value];
-            }
-            else {
-                if (isArray(vFor)) {
-                    context = vFor.find((vForItem) => {
-                        return getTarget(vForItem, propPath) === value;
-                    });
-                }
-                else if (isPlainObject(vFor)) {
-                    context = Object.keys(vFor).find((vForKey) => {
-                        return getTarget(vFor[vForKey], propPath) === value;
-                    });
-                }
-                else {
-                    console.error('v-for 暂不支持循环数据：', vFor);
-                }
-            }
-            if (valuePath) {
-                context = getTarget(context, valuePath);
-            }
-        }
-    });
-    return context;
-}
-function processEventExtra(instance, extra, event) {
-    const extraObj = {};
-    if (isArray(extra) && extra.length) {
-        /**
-         *[
-         *    ['data.items', 'data.id', item.data.id],
-         *    ['metas', 'id', meta.id]
-         *],
-         *[
-         *    ['data.items', 'data.id', item.data.id],
-         *    ['metas', 'id', meta.id]
-         *],
-         *'test'
-         */
-        extra.forEach((dataPath, index) => {
-            if (typeof dataPath === 'string') {
-                if (!dataPath) {
-                    // model,prop.sync
-                    extraObj['$' + index] = instance;
-                }
-                else {
-                    if (dataPath === '$event') {
-                        // $event
-                        extraObj['$' + index] = event;
-                    }
-                    else if (dataPath === 'arguments') {
-                        if (event.detail && event.detail.__args__) {
-                            extraObj['$' + index] = event.detail.__args__;
-                        }
-                        else {
-                            extraObj['$' + index] = [event];
-                        }
-                    }
-                    else if (dataPath.indexOf('$event.') === 0) {
-                        // $event.target.value
-                        extraObj['$' + index] = getTarget(event, dataPath.replace('$event.', ''));
-                    }
-                    else {
-                        extraObj['$' + index] = getTarget(instance, dataPath);
-                    }
-                }
-            }
-            else {
-                extraObj['$' + index] = getExtraValue(instance, dataPath);
-            }
-        });
-    }
-    return extraObj;
-}
-function getObjByArray(arr) {
-    const obj = {};
-    for (let i = 1; i < arr.length; i++) {
-        const element = arr[i];
-        obj[element[0]] = element[1];
-    }
-    return obj;
-}
-function processEventArgs(instance, event, args = [], extra = [], isCustom, methodName) {
-    let isCustomMPEvent = false; // wxcomponent 组件，传递原始 event 对象
-    if (isCustom) {
-        // 自定义事件
-        isCustomMPEvent =
-            event.currentTarget &&
-                event.currentTarget.dataset &&
-                event.currentTarget.dataset.comType === 'wx';
-        if (!args.length) {
-            // 无参数，直接传入 event 或 detail 数组
-            if (isCustomMPEvent) {
-                return [event];
-            }
-            return event.detail.__args__ || event.detail;
-        }
-    }
-    const extraObj = processEventExtra(instance, extra, event);
-    const ret = [];
-    args.forEach((arg) => {
-        if (arg === '$event') {
-            if (methodName === '__set_model' && !isCustom) {
-                // input v-model value
-                ret.push(event.target.value);
-            }
-            else {
-                if (isCustom && !isCustomMPEvent) {
-                    ret.push(event.detail.__args__[0]);
-                }
-                else {
-                    // wxcomponent 组件或内置组件
-                    ret.push(event);
-                }
-            }
-        }
-        else {
-            if (isArray(arg) && arg[0] === 'o') {
-                ret.push(getObjByArray(arg));
-            }
-            else if (typeof arg === 'string' && hasOwn(extraObj, arg)) {
-                ret.push(extraObj[arg]);
-            }
-            else {
-                ret.push(arg);
-            }
-        }
-    });
-    return ret;
-}
-function wrapper(event) {
-    event.stopPropagation = NOOP;
-    event.preventDefault = NOOP;
-    event.target = event.target || {};
-    if (!hasOwn(event, 'detail')) {
-        event.detail = {};
-    }
-    if (hasOwn(event, 'markerId')) {
-        event.detail = typeof event.detail === 'object' ? event.detail : {};
-        event.detail.markerId = event.markerId;
-    }
-    if (isPlainObject(event.detail)) {
-        event.target = extend({}, event.target, event.detail);
-    }
-    return event;
-}
-const ONCE = '~';
-const CUSTOM = '^';
-function matchEventType(eventType, optType) {
-    return (eventType === optType ||
-        (optType === 'regionchange' &&
-            (eventType === 'begin' || eventType === 'end')));
-}
-function handleEvent(event) {
-    event = wrapper(event);
-    // [['tap',[['handle',[1,2,a]],['handle1',[1,2,a]]]]]
-    const dataset = (event.currentTarget || event.target).dataset;
-    if (!dataset) {
-        return console.warn('事件信息不存在');
-    }
-    const eventOpts = (dataset.eventOpts ||
-        dataset['event-opts']); // 支付宝 web-view 组件 dataset 非驼峰
-    if (!eventOpts) {
-        return console.warn('事件信息不存在');
-    }
-    // [['handle',[1,2,a]],['handle1',[1,2,a]]]
-    const eventType = event.type;
-    const ret = [];
-    eventOpts.forEach((eventOpt) => {
-        let type = eventOpt[0];
-        const eventsArray = eventOpt[1];
-        const isCustom = type.charAt(0) === CUSTOM;
-        type = isCustom ? type.slice(1) : type;
-        const isOnce = type.charAt(0) === ONCE;
-        type = isOnce ? type.slice(1) : type;
-        if (eventsArray && matchEventType(eventType, type)) {
-            eventsArray.forEach((eventArray) => {
-                const methodName = eventArray[0];
-                if (methodName) {
-                    let handlerCtx = this.$vm;
-                    if (handlerCtx.$options.generic &&
-                        handlerCtx.$parent &&
-                        handlerCtx.$parent.$parent) {
-                        // mp-weixin,mp-toutiao 抽象节点模拟 scoped slots
-                        handlerCtx = handlerCtx.$parent.$parent;
-                    }
-                    if (methodName === '$emit') {
-                        handlerCtx.$emit.apply(handlerCtx, processEventArgs(this.$vm, event, eventArray[1], eventArray[2], isCustom, methodName));
-                        return;
-                    }
-                    const handler = handlerCtx[methodName];
-                    if (!isFunction(handler)) {
-                        throw new Error(` _vm.${methodName} is not a function`);
-                    }
-                    if (isOnce) {
-                        if (handler.once) {
-                            return;
-                        }
-                        handler.once = true;
-                    }
-                    let params = processEventArgs(this.$vm, event, eventArray[1], eventArray[2], isCustom, methodName);
-                    params = Array.isArray(params) ? params : [];
-                    // 参数尾部增加原始事件对象用于复杂表达式内获取额外数据
-                    if (/=\s*\S+\.eventParams\s*\|\|\s*\S+\[['"]event-params['"]\]/.test(handler.toString())) {
-                        // eslint-disable-next-line no-sparse-arrays
-                        params = params.concat([, , , , , , , , , , event]);
-                    }
-                    ret.push(handler.apply(handlerCtx, params));
-                }
-            });
-        }
-    });
-    if (eventType === 'input' &&
-        ret.length === 1 &&
-        typeof ret[0] !== 'undefined') {
-        return ret[0];
-    }
 }
 
 let $createComponentFn;
 let $destroyComponentFn;
+function getAppVm() {
+    if (process.env.UNI_MP_PLUGIN) {
+        return my.$vm;
+    }
+    if (process.env.UNI_SUBPACKAGE) {
+        return my.$subpackages[process.env.UNI_SUBPACKAGE].$vm;
+    }
+    return getApp().$vm;
+}
 function $createComponent(initialVNode, options) {
     if (!$createComponentFn) {
-        $createComponentFn = getApp().$vm.$createComponent;
+        $createComponentFn = getAppVm().$createComponent;
     }
-    return $createComponentFn(initialVNode, options);
+    const proxy = $createComponentFn(initialVNode, options);
+    return getExposeProxy(proxy.$) || proxy;
 }
 function $destroyComponent(instance) {
     if (!$destroyComponentFn) {
-        $destroyComponentFn = getApp().$vm.$destroyComponent;
+        $destroyComponentFn = getAppVm().$destroyComponent;
     }
     return $destroyComponentFn(instance);
 }
 
-function onAliAuthError(method, $event) {
-    $event.type = 'getphonenumber';
-    $event.detail.errMsg =
-        'getPhoneNumber:fail Error: ' +
-            $event.detail.errorMessage(this)[method]($event);
-}
-function onAliGetAuthorize(method, $event) {
-    my.getPhoneNumber({
-        success: (res) => {
-            $event.type = 'getphonenumber';
-            const response = JSON.parse(res.response).response;
-            if (response.code === '10000') {
-                // success
-                $event.detail.errMsg = 'getPhoneNumber:ok';
-                $event.detail.encryptedData = res.response;
-            }
-            else {
-                $event.detail.errMsg = 'getPhoneNumber:fail Error: ' + res.response;
-            }
-            this[method]($event);
-        },
-        fail: () => {
-            $event.type = 'getphonenumber';
-            $event.detail.errMsg = 'getPhoneNumber:fail';
-            this[method]($event);
-        },
-    });
-}
-function parse(appOptions) {
-    const oldOnLaunch = appOptions.onLaunch;
-    appOptions.onLaunch = function onLaunch(options) {
-        oldOnLaunch.call(this, options);
-        if (!this.$vm) {
-            return;
-        }
-        const globalProperties = this.$vm.$app.config.globalProperties;
-        if (!globalProperties.$onAliAuthError) {
-            globalProperties.$onAliAuthError = onAliAuthError;
-            globalProperties.$onAliGetAuthorize = onAliGetAuthorize;
+function initCreatePluginApp(parseAppOptions) {
+    return function createApp(vm) {
+        initAppLifecycle(parseApp(vm, parseAppOptions), vm);
+        if (process.env.UNI_MP_PLUGIN) {
+            my.$vm = vm;
         }
     };
 }
-
-var parseAppOptions = /*#__PURE__*/Object.freeze({
-    __proto__: null,
-    parse: parse
-});
 
 function handleLink$1(event) {
     // detail 是微信,value 是百度(dipatch)
@@ -1082,73 +586,11 @@ function handleLink$1(event) {
     detail.parent = parentVm;
 }
 
-function equal(a, b) {
-    if (a === b)
-        return true;
-    if (a && b && typeof a === 'object' && typeof b === 'object') {
-        const arrA = isArray(a);
-        const arrB = isArray(b);
-        let i, length, key;
-        if (arrA && arrB) {
-            length = a.length;
-            if (length !== b.length)
-                return false;
-            for (i = length; i-- !== 0;) {
-                if (!equal(a[i], b[i]))
-                    return false;
-            }
-            return true;
-        }
-        if (arrA !== arrB)
-            return false;
-        const dateA = a instanceof Date;
-        const dateB = b instanceof Date;
-        if (dateA !== dateB)
-            return false;
-        if (dateA && dateB)
-            return a.getTime() === b.getTime();
-        const regexpA = a instanceof RegExp;
-        const regexpB = b instanceof RegExp;
-        if (regexpA !== regexpB)
-            return false;
-        if (regexpA && regexpB)
-            return a.toString() === b.toString();
-        const keys = Object.keys(a);
-        length = keys.length;
-        if (length !== Object.keys(b).length) {
-            return false;
-        }
-        for (i = length; i-- !== 0;) {
-            if (!hasOwn(b, keys[i]))
-                return false;
-        }
-        for (i = length; i-- !== 0;) {
-            key = keys[i];
-            if (!equal(a[key], b[key]))
-                return false;
-        }
-        return true;
-    }
-    return false;
-}
-
 const isComponent2 = my.canIUse('component2');
 const mocks = ['$id'];
-const customizeRE = /:/g;
-function customize(str) {
-    return camelize(str.replace(customizeRE, '-'));
-}
-function initBehavior({ properties }) {
-    const props = {};
-    Object.keys(properties).forEach((key) => {
-        props[key] = properties[key].value;
-    });
-    return {
-        props,
-    };
-}
 function initRelation(mpInstance, detail) {
-    mpInstance.props.onVueInit(detail);
+    // onVueInit
+    mpInstance.props.onVI(detail);
 }
 function initSpecialMethods(mpInstance) {
     if (!mpInstance.$vm) {
@@ -1159,7 +601,7 @@ function initSpecialMethods(mpInstance) {
         return;
     }
     if (path.indexOf('/') === 0) {
-        path = path.substr(1);
+        path = path.slice(1);
     }
     const specialMethods = my.specialMethods && my.specialMethods[path];
     if (specialMethods) {
@@ -1202,63 +644,90 @@ function initChildVues(mpInstance) {
     }
     delete mpInstance._$childVues;
 }
-// TODO vue3
 function handleRef(ref) {
     if (!ref) {
         return;
     }
-    const refName = ref.props['data-ref'];
-    const refInForName = ref.props['data-ref-in-for'];
+    const refName = ref.props.uR; // data-ref
+    const refInForName = ref.props.uRIF; // data-ref-in-for
     if (!refName && !refInForName) {
         return;
     }
     const instance = this.$vm.$;
     const refs = instance.refs === EMPTY_OBJ ? (instance.refs = {}) : instance.refs;
+    const { setupState } = instance;
+    const refValue = ref.$vm;
     if (refName) {
-        refs[refName] = ref.$vm || ref;
+        if (isString(refName)) {
+            refs[refName] = refValue;
+            if (hasOwn(setupState, refName)) {
+                setupState[refName] = refValue;
+            }
+        }
+        else {
+            setRef(refName, refValue, refs, setupState);
+        }
     }
     else if (refInForName) {
-        (refs[refInForName] || (refs[refInForName] = [])).push(ref.$vm || ref);
+        if (isString(refInForName)) {
+            (refs[refInForName] || (refs[refInForName] = [])).push(refValue);
+        }
+        else {
+            setRef(refInForName, refValue, refs, setupState);
+        }
+    }
+}
+function isTemplateRef(opts) {
+    return !!(opts && opts.r);
+}
+function setRef(ref, refValue, refs, setupState) {
+    if (isRef(ref)) {
+        ref.value = refValue;
+    }
+    else if (isFunction(ref)) {
+        const templateRef = ref(refValue, refs);
+        if (isTemplateRef(templateRef)) {
+            setTemplateRef(templateRef, refValue, setupState);
+        }
     }
 }
 function triggerEvent(type, detail) {
-    const handler = this.props[customize('on-' + type)];
+    const handler = this.props[customizeEvent('on-' + type)];
     if (!handler) {
         return;
     }
-    const eventOpts = this.props['data-event-opts'];
     const target = {
-        dataset: {
-            eventOpts,
-        },
+        dataset: {},
     };
     handler({
-        type: customize(type),
+        type: customizeEvent(type),
         target,
         currentTarget: target,
         detail,
     });
 }
-const IGNORES = ['$slots', '$scopedSlots'];
-function createObserver(isDidUpdate = false) {
-    return function observe(props) {
-        const prevProps = isDidUpdate ? props : this.props;
-        const nextProps = isDidUpdate ? this.props : props;
-        if (equal(prevProps, nextProps)) {
+// const IGNORES = ['$slots', '$scopedSlots']
+function initPropsObserver(componentOptions) {
+    const observe = function observe(props) {
+        const nextProps = isComponent2 ? props : this.props;
+        const up = nextProps.uP;
+        if (!up) {
             return;
         }
-        Object.keys(prevProps).forEach((name) => {
-            if (IGNORES.indexOf(name) === -1) {
-                const prevValue = prevProps[name];
-                const nextValue = nextProps[name];
-                if (!isFunction(prevValue) &&
-                    !isFunction(nextValue) &&
-                    !equal(prevValue, nextValue)) {
-                    this.$vm.$.props[name] = nextProps[name];
-                }
-            }
-        });
+        if (this.$vm) {
+            updateComponentProps(up, this.$vm.$);
+        }
+        else if (this.props.uT === 'm') {
+            // 小程序组件
+            updateMiniProgramComponentProperties(up, this);
+        }
     };
+    if (isComponent2) {
+        componentOptions.deriveDataFromProps = observe;
+    }
+    else {
+        componentOptions.didUpdate = observe;
+    }
 }
 const handleLink = (function () {
     if (isComponent2) {
@@ -1281,10 +750,11 @@ const handleLink = (function () {
 function createVueComponent(mpType, mpInstance, vueOptions, parent) {
     return $createComponent({
         type: vueOptions,
-        props: mpInstance.props,
+        props: findPropsData(mpInstance.props, mpType === 'page'),
     }, {
         mpType,
         mpInstance,
+        slots: mpInstance.props.uS || {}, // vueSlots
         parentComponent: parent && parent.$,
         onBeforeSetup(instance, options) {
             initMocks(instance, mpInstance, mocks);
@@ -1293,60 +763,133 @@ function createVueComponent(mpType, mpInstance, vueOptions, parent) {
     });
 }
 
-function createPage$1(vueOptions) {
-    vueOptions = vueOptions.default || vueOptions;
-    const pageOptions = {
-        onLoad(query) {
-            this.options = query;
-            this.$page = {
-                fullPath: '/' + this.route + stringifyQuery(query),
-            };
-            // 初始化 vue 实例
-            this.$vm = createVueComponent('page', this, vueOptions);
-            initSpecialMethods(this);
-            this.$vm.$callHook(ON_LOAD, query);
-        },
-        onReady() {
-            initChildVues(this);
-            this.$vm.$callHook('mounted');
-            this.$vm.$callHook(ON_READY);
-        },
-        onUnload() {
-            if (this.$vm) {
-                this.$vm.$callHook(ON_UNLOAD);
-                $destroyComponent(this.$vm);
-            }
-        },
-        events: {
-            // 支付宝小程序有些页面事件只能放在events下
-            onBack() {
-                this.$vm.$callHook(ON_BACK_PRESS);
-            },
-        },
-        __r: handleRef,
-        __e: handleEvent,
-        __l: handleLink,
-    };
-    if (__VUE_OPTIONS_API__) {
-        pageOptions.data = initData(vueOptions);
+const MPComponent = Component;
+Component = function (options) {
+    // 小程序组件
+    const isVueComponent = options.props && typeof options.props.uP !== 'undefined';
+    if (!isVueComponent) {
+        initPropsObserver(options);
     }
-    initHooks(pageOptions, PAGE_HOOKS);
-    initUnknownHooks(pageOptions, vueOptions);
-    initWxsCallMethods(pageOptions, vueOptions.wxsCallMethods);
-    return Page(pageOptions);
+    return MPComponent(options);
+};
+
+function onAliAuthError(method, $event) {
+    $event.type = 'getphonenumber';
+    $event.detail.errMsg =
+        'getPhoneNumber:fail Error: ' + $event.detail.errorMessage;
+    method($event);
+}
+function onAliGetAuthorize(method, $event) {
+    my.getPhoneNumber({
+        success: (res) => {
+            $event.type = 'getphonenumber';
+            const response = JSON.parse(res.response);
+            $event.detail.errMsg = 'getPhoneNumber:ok';
+            $event.detail.encryptedData = response.response;
+            $event.detail.sign = response.sign;
+            method($event);
+        },
+        fail: (res) => {
+            $event.type = 'getphonenumber';
+            $event.detail.errMsg = 'getPhoneNumber:fail Error: ' + JSON.stringify(res);
+            method($event);
+        },
+    });
+}
+function parse(appOptions) {
+    const oldOnLaunch = appOptions.onLaunch;
+    appOptions.onLaunch = function onLaunch(options) {
+        oldOnLaunch.call(this, options);
+        if (!this.$vm) {
+            return;
+        }
+        const globalProperties = this.$vm.$app.config.globalProperties;
+        if (!globalProperties.$onAliAuthError) {
+            globalProperties.$onAliAuthError = onAliAuthError;
+            globalProperties.$onAliGetAuthorize = onAliGetAuthorize;
+        }
+    };
 }
 
-function initComponentProps(rawProps) {
+var parseAppOptions = /*#__PURE__*/Object.freeze({
+  __proto__: null,
+  parse: parse
+});
+
+function initCreatePage() {
+    return function createPage(vueOptions) {
+        vueOptions = vueOptions.default || vueOptions;
+        const pageOptions = {
+            onLoad(query) {
+                {
+                    this.options = query;
+                }
+                this.$page = {
+                    fullPath: addLeadingSlash(this.route + stringifyQuery(query)),
+                };
+                // 初始化 vue 实例
+                this.props = query;
+                this.$vm = createVueComponent('page', this, vueOptions);
+                initSpecialMethods(this);
+                this.$vm.$callHook(ON_LOAD, query);
+            },
+            onShow() {
+                if (__VUE_PROD_DEVTOOLS__) {
+                    devtoolsComponentAdded(this.$vm.$);
+                }
+                this.$vm.$callHook(ON_SHOW);
+            },
+            onReady() {
+                initChildVues(this);
+                this.$vm.$callHook('mounted');
+                this.$vm.$callHook(ON_READY);
+            },
+            onUnload() {
+                if (this.$vm) {
+                    this.$vm.$callHook(ON_UNLOAD);
+                    $destroyComponent(this.$vm);
+                }
+            },
+            events: {
+                // 支付宝小程序有些页面事件只能放在events下
+                onBack() {
+                    this.$vm.$callHook(ON_BACK_PRESS);
+                },
+                onKeyboardHeight: ((res) => {
+                    my.$emit('uni:keyboardHeightChange', res);
+                }),
+            },
+            __r: handleRef,
+            __l: handleLink,
+        };
+        if (isPlainObject(vueOptions.events)) {
+            extend(pageOptions.events, vueOptions.events);
+        }
+        if (__VUE_OPTIONS_API__) {
+            pageOptions.data = initData();
+        }
+        initHooks(pageOptions, PAGE_INIT_HOOKS);
+        initUnknownHooks(pageOptions, vueOptions);
+        initRuntimeHooks(pageOptions, vueOptions.__runtimeHooks);
+        initWxsCallMethods(pageOptions, vueOptions.wxsCallMethods);
+        return Page(pageOptions);
+    };
+}
+
+// @ts-expect-error
+function initComponentProps(_rawProps) {
     const propertiesOptions = {
         properties: {},
     };
-    initProps(propertiesOptions, rawProps, false);
+    initProps(propertiesOptions);
     const properties = propertiesOptions.properties;
     const props = {
-        onVueInit: function () { },
+        // onVueInit
+        onVI: function () { },
     };
     Object.keys(properties).forEach((key) => {
-        if (key !== 'vueSlots') {
+        // vueSlots
+        if (key !== 'uS') {
             props[key] = properties[key].value;
         }
     });
@@ -1357,7 +900,7 @@ function initVm(mpInstance, createComponent) {
         return;
     }
     const properties = mpInstance.props;
-    initVueIds(properties.vueId, mpInstance);
+    initVueIds(properties.uI, mpInstance);
     const relationOptions = {
         vuePid: mpInstance._$vuePid,
         mpInstance,
@@ -1382,61 +925,72 @@ function initVm(mpInstance, createComponent) {
         }
     }
 }
-function createComponent$1(vueOptions) {
-    vueOptions = vueOptions.default || vueOptions;
-    const mpComponentOptions = {
-        props: initComponentProps(vueOptions.props),
-        didMount() {
-            const createComponent = (parent) => {
-                return createVueComponent('component', this, vueOptions, parent);
-            };
-            if (my.dd) {
-                // 钉钉小程序底层基础库有 bug,组件嵌套使用时,在 didMount 中无法及时调用 props 中的方法
-                setTimeout(() => {
+function initCreateComponent() {
+    return function createComponent(vueOptions) {
+        vueOptions = vueOptions.default || vueOptions;
+        const mpComponentOptions = {
+            props: initComponentProps(vueOptions.props),
+            didMount() {
+                const createComponent = (parent) => {
+                    return createVueComponent('component', this, vueOptions, parent);
+                };
+                if (my.dd) {
+                    // 钉钉小程序底层基础库有 bug,组件嵌套使用时,在 didMount 中无法及时调用 props 中的方法
+                    setTimeout(() => {
+                        initVm(this, createComponent);
+                    }, 4);
+                }
+                else {
                     initVm(this, createComponent);
-                }, 4);
-            }
-            else {
-                initVm(this, createComponent);
-            }
-            initSpecialMethods(this);
-            if (isComponent2) {
-                this.$vm.$callHook('mounted');
-            }
-        },
-        didUnmount() {
-            $destroyComponent(this.$vm);
-        },
-        methods: {
-            __r: handleRef,
-            __e: handleEvent,
-            __l: handleLink,
-            triggerEvent,
-        },
-    };
-    if (__VUE_OPTIONS_API__) {
-        mpComponentOptions.data = initData(vueOptions);
-        mpComponentOptions.mixins = initBehaviors(vueOptions, initBehavior);
-    }
-    if (isComponent2) {
-        mpComponentOptions.onInit = function onInit() {
-            initVm(this, (parent) => {
-                return createVueComponent('component', this, vueOptions, parent);
-            });
+                }
+                initSpecialMethods(this);
+                if (isComponent2) {
+                    this.$vm.$callHook('mounted');
+                }
+            },
+            didUnmount() {
+                if (this.$vm) {
+                    pruneComponentPropsCache(this.$vm.$.uid);
+                    $destroyComponent(this.$vm);
+                }
+            },
+            methods: {
+                __r: handleRef,
+                __l: handleLink,
+                triggerEvent,
+            },
         };
-        mpComponentOptions.deriveDataFromProps = createObserver();
-    }
-    else {
-        mpComponentOptions.didUpdate = createObserver(true);
-    }
-    initWxsCallMethods(mpComponentOptions.methods, vueOptions.wxsCallMethods);
-    return Component(mpComponentOptions);
+        // vueOptions.options
+        if (vueOptions.options) {
+            mpComponentOptions.options = vueOptions.options;
+        }
+        if (__VUE_OPTIONS_API__) {
+            mpComponentOptions.data = initData();
+            mpComponentOptions.mixins = initBehaviors(vueOptions);
+        }
+        if (isComponent2) {
+            mpComponentOptions.onInit = function onInit() {
+                initVm(this, (parent) => {
+                    return createVueComponent('component', this, vueOptions, parent);
+                });
+            };
+        }
+        initPropsObserver(mpComponentOptions);
+        initWxsCallMethods(mpComponentOptions.methods, vueOptions.wxsCallMethods);
+        return Component(mpComponentOptions);
+    };
 }
 
 const createApp = initCreateApp(parseAppOptions);
+const createPage = initCreatePage();
+const createComponent = initCreateComponent();
+const createPluginApp = initCreatePluginApp(parseAppOptions);
+const createSubpackageApp = initCreateSubpackageApp(parseAppOptions);
 my.EventChannel = EventChannel;
-my.createApp = global.createApp = createApp;
+my.createApp = createApp;
 my.createPage = createPage;
 my.createComponent = createComponent;
+my.createPluginApp = createPluginApp;
+my.createSubpackageApp = createSubpackageApp;
 
-export { createApp, createComponent$1 as createComponent, createPage$1 as createPage };
+export { createApp, createComponent, createPage, createPluginApp, createSubpackageApp };

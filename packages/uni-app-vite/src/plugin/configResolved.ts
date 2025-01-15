@@ -1,22 +1,29 @@
-import fs from 'fs'
-import { Plugin } from 'vite'
+import type { Plugin, ResolvedConfig } from 'vite'
 
 import {
-  removePlugins,
+  createEncryptCssUrlReplacer,
   injectAssetPlugin,
   injectCssPlugin,
   injectCssPostPlugin,
 } from '@dcloudio/uni-cli-shared'
 
-export const configResolved: Plugin['configResolved'] = (config) => {
-  removePlugins('vite:import-analysis', config)
-  injectCssPlugin(config)
-  injectCssPostPlugin(config, {
-    extname: '.css',
-    appCss: fs.readFileSync(
-      require.resolve('@dcloudio/uni-app-plus/dist/style.css'),
-      'utf8'
-    ),
-  })
-  injectAssetPlugin(config)
+export function createConfigResolved({
+  createCssPostPlugin,
+}: {
+  createCssPostPlugin: (config: ResolvedConfig) => Plugin
+}): Plugin['configResolved'] {
+  return (config) => {
+    injectCssPlugin(
+      config,
+      process.env.UNI_COMPILE_TARGET === 'uni_modules'
+        ? {
+            createUrlReplacer: createEncryptCssUrlReplacer,
+          }
+        : {}
+    )
+    injectCssPostPlugin(config, createCssPostPlugin(config))
+    // 强制不inline
+    config.build.assetsInlineLimit = 0
+    injectAssetPlugin(config)
+  }
 }

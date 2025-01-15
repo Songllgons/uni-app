@@ -1,3 +1,6 @@
+declare var global: typeof globalThis
+declare var __VUE__: any
+declare var Vue: any
 declare var weex: any
 
 declare var tt: any
@@ -5,6 +8,10 @@ declare var qa: any
 declare var swan: any
 declare var qq: any
 declare var ks: any
+declare var jd: any
+declare var xhs: any
+declare var has: any
+declare var __NVUE__: undefined | boolean
 declare var __PLATFORM__: UniApp.PLATFORM
 declare var __PLATFORM_PREFIX__:
   | 'wx'
@@ -14,6 +21,8 @@ declare var __PLATFORM_PREFIX__:
   | 'tt'
   | 'qa'
   | 'ks'
+  | 'jd'
+  | 'xhs'
 declare var __GLOBAL__: Record<string, any>
 
 // importMeta(es|cjs)
@@ -22,14 +31,18 @@ declare var __IMPORT_META_ENV_BASE_URL__:
   | '__IMPORT_META_ENV_BASE_URL__'
 
 // Global compile-time constants
+declare var __X__: boolean
 declare var __DEV__: boolean
 declare var __TEST__: boolean
 declare var __NODE_JS__: boolean
 declare var __APP_VIEW__: boolean
+declare var __PLUS__: boolean
 
 // Feature flags
 declare var __VUE_OPTIONS_API__: boolean
+declare var __VUE_PROD_DEVTOOLS__: boolean
 
+declare var __UNI_FEATURE_VIRTUAL_HOST__: boolean
 declare var __UNI_FEATURE_WX__: boolean
 declare var __UNI_FEATURE_WXS__: boolean
 declare var __UNI_FEATURE_RPX__: boolean
@@ -62,3 +75,16 @@ declare var __uniRoutes: UniApp.UniRoutes
 declare var __uniConfig: UniApp.UniConfig
 declare var UniViewJSBridge: UniApp.UniViewJSBridge
 declare var UniServiceJSBridge: UniApp.UniServiceJSBridge
+// app view
+declare var __id__: string
+// uni-console
+declare var __HARMONY__: boolean
+// TODO X 引入真实类型
+declare class UTSJSONObject {
+  constructor(obj: Record<string, any>)
+}
+// 解决 test-dts 使用了小程序的Require导致编译器require.resolve,require.cache报错
+interface Require {
+  resolve: NodeRequire['resolve']
+  cache: NodeRequire['cache']
+}

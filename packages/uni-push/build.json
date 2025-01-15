@@ -1,0 +1,26 @@
+[
+  {
+    "input": {
+      "src/plugin/index.ts": "lib/uni.plugin.js"
+    },
+    "output": {
+      "format": "cjs"
+    },
+    "external": ["debug", "@dcloudio/uni-cli-shared"]
+  },
+  {
+    "input": {
+      "src/index.ts": ["dist/uni-push.es.js"]
+    }
+  },
+  {
+    "input": {
+      "src/plus.ts": ["dist/uni-push.plus.es.js"]
+    }
+  },
+  {
+    "input": {
+      "src/plus-v1.ts": ["dist/uni-push-v1.plus.es.js"]
+    }
+  }
+]

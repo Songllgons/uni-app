@@ -1,33 +1,36 @@
 import {
-  defineAsyncApi,
-  API_ON_COMPASS,
-  API_TYPE_ON_COMPASS_CHANGE,
   API_OFF_COMPASS,
-  API_TYPE_OFF_COMPASS_CHANGE,
+  API_ON_COMPASS,
   API_START_COMPASS,
-  API_TYPE_START_COMPASS,
   API_STOP_COMPASS,
-  API_TYPE_STOP_COMPASS,
-  defineOnApi,
+  type API_TYPE_OFF_COMPASS_CHANGE,
+  type API_TYPE_ON_COMPASS_CHANGE,
+  type API_TYPE_START_COMPASS,
+  type API_TYPE_STOP_COMPASS,
+  defineAsyncApi,
   defineOffApi,
+  defineOnApi,
 } from '@dcloudio/uni-api'
 
 let listener: ((event: DeviceOrientationEvent) => void) | null = null
 
-export const onCompassChange = <API_TYPE_ON_COMPASS_CHANGE>(
-  defineOnApi(API_ON_COMPASS, () => {
+export const onCompassChange = defineOnApi<API_TYPE_ON_COMPASS_CHANGE>(
+  API_ON_COMPASS,
+  () => {
     startCompass()
-  })
+  }
 )
 
-export const offCompassChange = <API_TYPE_OFF_COMPASS_CHANGE>(
-  defineOffApi(API_OFF_COMPASS, () => {
+export const offCompassChange = defineOffApi<API_TYPE_OFF_COMPASS_CHANGE>(
+  API_OFF_COMPASS,
+  () => {
     stopCompass()
-  })
+  }
 )
 
-export const startCompass = <API_TYPE_START_COMPASS>(
-  defineAsyncApi(API_START_COMPASS, (_, { resolve, reject }) => {
+export const startCompass = defineAsyncApi<API_TYPE_START_COMPASS>(
+  API_START_COMPASS,
+  (_, { resolve, reject }) => {
     if (!window.DeviceOrientationEvent) {
       reject()
       return
@@ -43,9 +46,10 @@ export const startCompass = <API_TYPE_START_COMPASS>(
       window.addEventListener('deviceorientation', listener, false)
     }
     if (!listener) {
-      if (DeviceOrientationEvent.requestPermission) {
-        DeviceOrientationEvent.requestPermission()
-          .then((res) => {
+      if ((DeviceOrientationEvent as any).requestPermission) {
+        ;(DeviceOrientationEvent as any)
+          .requestPermission()
+          .then((res: string) => {
             if (res === 'granted') {
               addEventListener()
               resolve()
@@ -53,7 +57,7 @@ export const startCompass = <API_TYPE_START_COMPASS>(
               reject(`${res}`)
             }
           })
-          .catch((error) => {
+          .catch((error: any) => {
             reject(`${error}`)
           })
         return
@@ -61,15 +65,16 @@ export const startCompass = <API_TYPE_START_COMPASS>(
       addEventListener()
     }
     resolve()
-  })
+  }
 )
 
-export const stopCompass = <API_TYPE_STOP_COMPASS>(
-  defineAsyncApi(API_STOP_COMPASS, (_, { resolve }) => {
+export const stopCompass = defineAsyncApi<API_TYPE_STOP_COMPASS>(
+  API_STOP_COMPASS,
+  (_, { resolve }) => {
     if (listener) {
       window.removeEventListener('deviceorientation', listener, false)
       listener = null
     }
     resolve()
-  })
+  }
 )

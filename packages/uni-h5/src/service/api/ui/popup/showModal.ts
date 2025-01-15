@@ -2,15 +2,15 @@ import { extend } from '@vue/shared'
 import { nextTick, reactive } from 'vue'
 import {
   API_SHOW_MODAL,
-  API_TYPE_SHOW_MODAL,
-  defineAsyncApi,
+  type API_TYPE_SHOW_MODAL,
   ShowModalOptions,
   ShowModalProtocol,
+  defineAsyncApi,
 } from '@dcloudio/uni-api'
 
-import modal, { ModalProps } from './modal'
+import modal, { type ModalProps } from './modal'
 
-import { ensureRoot, createRootApp } from './utils'
+import { createRootApp, ensureRoot } from './utils'
 import { once } from '@dcloudio/uni-shared'
 
 let showModalState: ModalProps
@@ -29,6 +29,12 @@ function onModalClose(type: 'cancel' | 'confirm', content: string) {
   }
   isConfirm && showModalState.editable && (res.content = content)
   currentShowModalResolve && currentShowModalResolve!(res)
+}
+
+export const hideModal = () => {
+  if (showModalState) {
+    showModalState.visible = false
+  }
 }
 
 export const showModal = defineAsyncApi<API_TYPE_SHOW_MODAL>(

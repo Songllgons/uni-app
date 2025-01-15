@@ -1,57 +1,76 @@
-import { Plugin, ResolvedConfig } from 'vite'
-import { FileWatcher, FileWatcherOptions } from '../../watcher'
+import type { WatchOptions } from 'chokidar'
+import type { Plugin, ResolvedConfig } from 'vite'
+import { FileWatcher, type FileWatcherOptions } from '../../watcher'
 import { M } from '../../messages'
-export type UniViteCopyPluginTarget = Omit<FileWatcherOptions, 'verbose'>
+import { output, resetOutput } from '../../logs'
+import { debounce } from '@dcloudio/uni-shared'
+
+export type UniViteCopyPluginTarget = Omit<FileWatcherOptions, 'verbose'> & {
+  watchOptions?: WatchOptions
+}
 export interface UniViteCopyPluginOptions {
   targets: UniViteCopyPluginTarget[]
-  verbose: boolean
 }
 export function uniViteCopyPlugin({
   targets,
-  verbose,
 }: UniViteCopyPluginOptions): Plugin {
   let resolvedConfig: ResolvedConfig
-  let inited = false
+  let initialized = false
+  let isFirstBuild = true
   return {
-    name: 'vite:uni-copy',
+    name: 'uni:copy',
     apply: 'build',
     configResolved(config) {
       resolvedConfig = config
     },
-    writeBundle() {
-      if (inited) {
+    async writeBundle() {
+      if (initialized) {
         return
       }
       if (resolvedConfig.build.ssr) {
         return
       }
-      inited = true
+      initialized = true
+      const is_prod =
+        process.env.NODE_ENV !== 'development' ||
+        process.env.UNI_AUTOMATOR_CONFIG
+      const onChange = is_prod
+        ? undefined
+        : debounce(
+            () => {
+              if (isFirstBuild) {
+                return
+              }
+              resetOutput('log')
+              output('log', M['dev.watching.end'])
+            },
+            100,
+            { setTimeout, clearTimeout }
+          )
       return new Promise((resolve) => {
         Promise.all(
-          targets.map((target) => {
+          targets.map(({ watchOptions, ...target }) => {
             return new Promise((resolve) => {
               new FileWatcher({
-                verbose,
                 ...target,
               }).watch(
                 {
                   cwd: process.env.UNI_INPUT_DIR,
-                },
-                (watcher) => {
-                  if (process.env.NODE_ENV !== 'development') {
-                    watcher.close().then(() => resolve(void 0))
-                  } else {
-                    resolve(void 0)
-                  }
+                  persistent: is_prod ? false : true,
+                  ...watchOptions,
                 },
                 () => {
-                  console.log(M['dev.watching.end'])
-                }
+                  resolve(void 0)
+                },
+                onChange
               )
             })
           })
         ).then(() => resolve())
       })
+    },
+    closeBundle() {
+      isFirstBuild = false
     },
   }
 }

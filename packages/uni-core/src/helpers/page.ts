@@ -1,31 +1,63 @@
-import { EventChannel } from '@dcloudio/uni-shared'
+import {
+  type EventChannel,
+  addLeadingSlash,
+  normalizeStyles,
+  resolveComponentInstance,
+} from '@dcloudio/uni-shared'
 import { extend } from '@vue/shared'
-import { ComponentPublicInstance, getCurrentInstance } from 'vue'
-import { rpx2px } from './util'
+import {
+  type ComponentInternalInstance,
+  type ComponentPublicInstance,
+  getCurrentInstance,
+} from 'vue'
+import { get$pageByPage, rpx2px } from './util'
 
 export function useCurrentPageId() {
   if (__APP_VIEW__) {
     // view 层
     return getCurrentPageId()
   }
-  return getCurrentInstance()!.root.proxy!.$page.id
+  // 暂时仅在 h5 平台实现 $pageInstance，避免影响过大
+  if (__PLATFORM__ === 'h5') {
+    const { $pageInstance } = getCurrentInstance()!
+    return $pageInstance && getPageProxyId($pageInstance.proxy!)
+  }
+  // App
+  let pageId
+  try {
+    pageId = getPageProxyId(getCurrentInstance()!.root.proxy!!)
+  } catch {
+    const webviewId = plus.webview.currentWebview().id
+    pageId = isNaN(Number(webviewId)) ? webviewId : Number(webviewId)
+  }
+  return pageId as number
 }
 
-export function getPageIdByVm(vm: ComponentPublicInstance) {
+export function getPageIdByVm(
+  instance: ComponentPublicInstance | ComponentInternalInstance
+) {
+  const vm = resolveComponentInstance(instance)!
   if (vm.$page) {
-    return vm.$page.id
+    return getPageProxyId(vm)
   }
   if (!vm.$) {
     return
   }
+  // 暂时仅在 h5 平台实现 $pageInstance，避免影响过大
+  if (__PLATFORM__ === 'h5') {
+    const { $pageInstance } = vm.$
+    if ($pageInstance) {
+      return getPageProxyId($pageInstance.proxy!)
+    }
+  }
   const rootProxy = vm.$.root.proxy
   if (rootProxy && rootProxy.$page) {
-    return rootProxy.$page.id
+    return getPageProxyId(rootProxy)
   }
 }
 
 function getPageById(id: number) {
-  return getCurrentPages().find((page) => page.$page.id === id)
+  return getCurrentPages().find((page) => get$pageByPage(page).id === id)
 }
 
 export function getPageVmById(id: number) {
@@ -39,7 +71,7 @@ export function getCurrentPage() {
   if (__APP_VIEW__) {
     return (window as any).__PAGE_INFO__ as Page.PageInstance
   }
-  const pages = getCurrentPages()
+  const pages = getCurrentPages() as Page.PageInstance[]
   const len = pages.length
   if (len) {
     return pages[len - 1]
@@ -47,9 +79,11 @@ export function getCurrentPage() {
 }
 
 export function getCurrentPageMeta() {
-  const page = getCurrentPage()
-  if (page) {
-    return page.$page.meta
+  const $page = __X__
+    ? (getCurrentPage() as unknown as UniPage)?.vm?.$basePage
+    : getCurrentPage()?.$page
+  if ($page) {
+    return $page.meta
   }
 }
 
@@ -69,7 +103,9 @@ export function getCurrentPageId() {
 }
 
 export function getCurrentPageVm() {
-  const page = getCurrentPage()
+  const page = __X__
+    ? (getCurrentPage() as unknown as UniPage)?.vm
+    : getCurrentPage()
   if (page) {
     return (page as any).$vm as ComponentPublicInstance
   }
@@ -97,6 +133,10 @@ export function initRouteMeta(
   return res
 }
 
+export function normalizeSubNVueStyle(style: Record<string, unknown>) {
+  return JSON.parse(rpx2px(JSON.stringify(style), true))
+}
+
 export function normalizePullToRefreshRpx(
   pullToRefresh: UniApp.PageRefreshOptions
 ) {
@@ -117,19 +157,28 @@ export function initPageInternalInstance(
   url: string,
   pageQuery: Record<string, any>,
   meta: UniApp.PageRouteMeta,
-  eventChannel?: EventChannel
+  eventChannel?: EventChannel,
+  themeMode?: UniApp.ThemeMode
 ): Page.PageInstance['$page'] {
   const { id, route } = meta
+  const titleColor = normalizeStyles(
+    meta.navigationBar,
+    __uniConfig.themeConfig,
+    themeMode
+  ).titleColor
   return {
     id: id!,
-    path: '/' + route,
+    path: addLeadingSlash(route),
     route: route,
     fullPath: url,
     options: pageQuery,
     meta,
     openType,
     eventChannel,
-    statusBarStyle:
-      meta.navigationBar.titleColor === '#000000' ? 'dark' : 'light',
+    statusBarStyle: titleColor === '#ffffff' ? 'light' : 'dark',
   }
+}
+
+function getPageProxyId(proxy: ComponentPublicInstance) {
+  return (proxy.$page as Page.PageInstance['$page'])?.id || proxy.$basePage?.id
 }

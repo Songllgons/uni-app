@@ -1,10 +1,5 @@
-import { ComponentDescriptorVm } from '@dcloudio/uni-core'
-import {
-  ComponentInternalInstance,
-  ComponentPublicInstance,
-  defineComponent,
-  h,
-} from 'vue'
+import type { ComponentDescriptorVm } from '@dcloudio/uni-core'
+import type { ComponentInternalInstance, ComponentPublicInstance } from 'vue'
 import { UniComment } from '../elements/UniComment'
 import { UniTextElement } from '../elements/UniTextElement'
 import { UniTextNode } from '../elements/UniTextNode'
@@ -28,6 +23,8 @@ import { UniLabel } from './UniLabel'
 import { UniLivePlayer } from './UniLivePlayer'
 import { UniLivePusher } from './UniLivePusher'
 import { UniMap } from './UniMap'
+import { UniLocationPicker } from './UniLocationPicker'
+import { UniLocationView } from './UniLocationView'
 import { UniMovableArea } from './UniMovableArea'
 import { UniMovableView } from './UniMovableView'
 import { UniNavigator } from './UniNavigator'
@@ -93,6 +90,8 @@ export const BuiltInComponents = {
   'LIVE-PLAYER': UniLivePlayer,
   'LIVE-PUSHER': UniLivePusher,
   MAP: UniMap,
+  'LOCATION-PICKER': UniLocationPicker,
+  'LOCATION-VIEW': UniLocationView,
   'MOVABLE-AREA': UniMovableArea,
   'MOVABLE-VIEW': UniMovableView,
   'OFFICIAL-ACCOUNT': UniOfficialAccount,
@@ -111,12 +110,3 @@ export const BuiltInComponents = {
   VIDEO: UniVideo,
   'WEB-VIEW': UniWebView,
 } as const
-
-export type WrapperComponent = ReturnType<typeof createWrapper>
-
-export function createWrapper(
-  component: ReturnType<typeof defineComponent>,
-  props: Record<string, any>
-) {
-  return () => h(component, props)
-}

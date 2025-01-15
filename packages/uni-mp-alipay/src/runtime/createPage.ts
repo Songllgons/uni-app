@@ -1,12 +1,16 @@
-import { ComponentOptions } from 'vue'
+import {
+  type ComponentOptions,
+  // @ts-expect-error
+  devtoolsComponentAdded,
+} from 'vue'
 
 import {
-  PAGE_HOOKS,
-  handleEvent,
+  $destroyComponent,
+  PAGE_INIT_HOOKS,
   initData,
   initHooks,
+  initRuntimeHooks,
   initUnknownHooks,
-  $destroyComponent,
   initWxsCallMethods,
 } from '@dcloudio/uni-mp-core'
 
@@ -14,64 +18,89 @@ import {
   ON_BACK_PRESS,
   ON_LOAD,
   ON_READY,
+  ON_SHOW,
   ON_UNLOAD,
+  addLeadingSlash,
   stringifyQuery,
 } from '@dcloudio/uni-shared'
 
 import {
-  handleRef,
+  createVueComponent,
   handleLink,
+  handleRef,
   initChildVues,
   initSpecialMethods,
-  createVueComponent,
 } from './util'
+
+import { extend, isPlainObject } from '@vue/shared'
 
 declare function Page<D>(options: tinyapp.PageOptions<D>): void
 
-export function createPage(vueOptions: ComponentOptions) {
-  vueOptions = vueOptions.default || vueOptions
-  const pageOptions: tinyapp.PageOptions = {
-    onLoad(query) {
-      this.options = query
-      this.$page = {
-        fullPath: '/' + this.route + stringifyQuery(query),
-      }
-      // 初始化 vue 实例
-      this.$vm = createVueComponent('page', this, vueOptions)
-      initSpecialMethods(this)
-      this.$vm.$callHook(ON_LOAD, query)
-    },
-    onReady() {
-      initChildVues(this)
-      this.$vm.$callHook('mounted')
-      this.$vm.$callHook(ON_READY)
-    },
-    onUnload() {
-      if (this.$vm) {
-        this.$vm.$callHook(ON_UNLOAD)
-        $destroyComponent(this.$vm)
-      }
-    },
-    events: {
-      // 支付宝小程序有些页面事件只能放在events下
-      onBack() {
-        this.$vm.$callHook(ON_BACK_PRESS)
+export function initCreatePage() {
+  return function createPage(vueOptions: ComponentOptions) {
+    vueOptions = vueOptions.default || vueOptions
+    const pageOptions: tinyapp.PageOptions = {
+      onLoad(query) {
+        if (__X__) {
+          // query并非多层级结构，无需递归处理
+          this.options = new UTSJSONObject(query || {})
+        } else {
+          this.options = query
+        }
+        this.$page = {
+          fullPath: addLeadingSlash(this.route + stringifyQuery(query)),
+        }
+        // 初始化 vue 实例
+        this.props = query
+        this.$vm = createVueComponent('page', this, vueOptions)
+        initSpecialMethods(this)
+        this.$vm.$callHook(ON_LOAD, query)
       },
-    },
-    __r: handleRef,
-    __e: handleEvent,
-    __l: handleLink,
-  }
-  if (__VUE_OPTIONS_API__) {
-    pageOptions.data = initData(vueOptions)
-  }
-  initHooks(pageOptions, PAGE_HOOKS)
-  initUnknownHooks(pageOptions, vueOptions)
+      onShow() {
+        if (__VUE_PROD_DEVTOOLS__) {
+          devtoolsComponentAdded(this.$vm.$)
+        }
+        this.$vm.$callHook(ON_SHOW)
+      },
+      onReady() {
+        initChildVues(this)
+        this.$vm.$callHook('mounted')
+        this.$vm.$callHook(ON_READY)
+      },
+      onUnload() {
+        if (this.$vm) {
+          this.$vm.$callHook(ON_UNLOAD)
+          $destroyComponent(this.$vm)
+        }
+      },
+      events: {
+        // 支付宝小程序有些页面事件只能放在events下
+        onBack() {
+          this.$vm.$callHook(ON_BACK_PRESS)
+        },
+        onKeyboardHeight: ((res: unknown) => {
+          ;(my as any).$emit('uni:keyboardHeightChange', res)
+        }) as any,
+      },
+      __r: handleRef,
+      __l: handleLink,
+    }
 
-  initWxsCallMethods(
-    pageOptions as WechatMiniprogram.Component.MethodOption,
-    vueOptions.wxsCallMethods
-  )
+    if (isPlainObject(vueOptions.events)) {
+      extend(pageOptions.events!, vueOptions.events)
+    }
 
-  return Page(pageOptions)
+    if (__VUE_OPTIONS_API__) {
+      pageOptions.data = initData(vueOptions)
+    }
+    initHooks(pageOptions, PAGE_INIT_HOOKS)
+    initUnknownHooks(pageOptions, vueOptions)
+    initRuntimeHooks(pageOptions, vueOptions.__runtimeHooks)
+    initWxsCallMethods(
+      pageOptions as WechatMiniprogram.Component.MethodOption,
+      vueOptions.wxsCallMethods
+    )
+
+    return Page(pageOptions)
+  }
 }

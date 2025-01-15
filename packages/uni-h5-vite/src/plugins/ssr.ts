@@ -1,22 +1,22 @@
 import path from 'path'
-import { Plugin, ResolvedConfig } from 'vite'
+import type { Plugin, ResolvedConfig } from 'vite'
 
-import { OutputChunk } from 'rollup'
-
-import {
-  parseCompatConfigOnce,
-  parseRpx2UnitOnce,
-} from '@dcloudio/uni-cli-shared'
+import type { OutputChunk } from 'rollup'
 
 import {
   isSsr,
-  initSsrDefine,
-  rewriteSsrVue,
-  rewriteSsrResolve,
-  rewriteSsrNativeTag,
-  rewriteSsrRenderStyle,
+  parseRpx2UnitOnce,
+  resolveBuiltIn,
+} from '@dcloudio/uni-cli-shared'
+
+import {
   generateSsrDefineCode,
   generateSsrEntryServerCode,
+  initSsrAliasOnce,
+  initSsrDefine,
+  rewriteSsrNativeTag,
+  rewriteSsrRenderStyle,
+  rewriteSsrVue,
 } from '../utils'
 
 const ENTRY_SERVER_JS = 'entry-server.js'
@@ -26,17 +26,36 @@ export function uniSSRPlugin(): Plugin {
   let resolvedConfig: ResolvedConfig
   const entryServerJsCode = generateSsrEntryServerCode()
   return {
-    name: 'vite:uni-h5-ssr',
+    name: 'uni:h5-ssr',
+    config(userConfig, env) {
+      if (isSsr(env.command, userConfig)) {
+        initSsrAliasOnce()
+        rewriteSsrVue()
+        rewriteSsrNativeTag()
+        rewriteSsrRenderStyle(process.env.UNI_INPUT_DIR)
+        return {
+          resolve: {
+            alias: [
+              {
+                find: 'vue/server-renderer',
+                replacement: path.dirname(
+                  resolveBuiltIn('@vue/server-renderer')
+                ),
+              },
+              {
+                find: 'vuex',
+                replacement: path.dirname(resolveBuiltIn('vuex/package.json')),
+              },
+            ],
+          },
+        }
+      }
+    },
     configResolved(config: ResolvedConfig) {
       resolvedConfig = config
       entryServerJs = path.join(process.env.UNI_INPUT_DIR, ENTRY_SERVER_JS)
       if (isSsr(resolvedConfig.command, resolvedConfig)) {
-        const { MODE } = parseCompatConfigOnce(process.env.UNI_INPUT_DIR)
         initSsrDefine(resolvedConfig)
-        rewriteSsrVue(MODE)
-        rewriteSsrResolve(MODE)
-        rewriteSsrNativeTag()
-        rewriteSsrRenderStyle(process.env.UNI_INPUT_DIR)
       }
     },
     resolveId(id) {
@@ -55,7 +74,10 @@ export function uniSSRPlugin(): Plugin {
         chunk.code =
           generateSsrDefineCode(
             resolvedConfig,
-            parseRpx2UnitOnce(process.env.UNI_INPUT_DIR)
+            parseRpx2UnitOnce(
+              process.env.UNI_INPUT_DIR,
+              process.env.UNI_PLATFORM
+            )
           ) +
           '\n' +
           chunk.code

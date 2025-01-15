@@ -23,7 +23,9 @@ export const ShowModalOptions: ApiOptions<API_TYPE_SHOW_MODAL> = {
   formatArgs: {
     title: '',
     content: '',
+    placeholderText: '',
     showCancel: true,
+    editable: false,
     cancelText(_value, params) {
       if (!hasOwn(params, 'cancelText')) {
         const { t } = useI18n()
@@ -37,6 +39,12 @@ export const ShowModalOptions: ApiOptions<API_TYPE_SHOW_MODAL> = {
         params.confirmText = t('uni.showModal.confirm')
       }
     },
+    //#if !_X_
     confirmColor: PRIMARY_COLOR,
+    //#endif
+    //#if _X_
+    //@ts-expect-error
+    confirmColor: '#576b95',
+    //#endif
   },
 }

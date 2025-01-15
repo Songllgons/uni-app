@@ -1,34 +1,49 @@
-import {
-  NOOP,
-  EMPTY_OBJ,
-  extend,
-  isString,
-  isArray,
-  capitalize,
-  camelize,
-} from '@vue/shared'
+import { EMPTY_OBJ, NOOP, extend, hasOwn, isArray, isString } from '@vue/shared'
 
 import {
-  DirectiveNode,
-  ElementNode,
+  type ArrowFunctionExpression,
+  type BlockStatement,
+  type ConditionalExpression,
+  type Identifier,
+  type ObjectExpression,
+  type ObjectProperty,
+  type ReturnStatement,
+  type SpreadElement,
+  callExpression,
+  identifier,
+  isCallExpression,
+  isConditionalExpression,
+  isIdentifier,
+  isObjectExpression,
+  isObjectProperty,
+  isSpreadElement,
+  objectExpression,
+  spreadElement,
+} from '@babel/types'
+import {
+  type CacheExpression,
+  type CompilerError,
+  type DirectiveNode,
+  type ElementNode,
+  type ExpressionNode,
+  type JSChildNode,
   NodeTypes,
-  Property,
-  RootNode,
-  ParentNode,
-  TemplateChildNode,
-  CREATE_COMMENT,
+  type ParentNode,
+  type Property,
+  type RootNode,
   TO_DISPLAY_STRING,
-  CompilerError,
+  type TemplateChildNode,
   helperNameMap,
-  ExpressionNode,
-  ElementTypes,
-  isVSlot,
-  JSChildNode,
-  CacheExpression,
   locStub,
 } from '@vue/compiler-core'
+import { findMiniProgramUsingComponents } from '@dcloudio/uni-cli-shared'
+import type {
+  MiniProgramComponentsType,
+  MiniProgramFilterOptions,
+} from '@dcloudio/uni-cli-shared'
 import IdentifierGenerator from './identifier'
-import {
+import type {
+  CodegenRootNode,
   CodegenRootScope,
   CodegenScope,
   CodegenVForScope,
@@ -37,6 +52,15 @@ import {
   CodegenVIfScopeInit,
   TransformOptions,
 } from './options'
+import { EXTEND } from './runtimeHelpers'
+import { createObjectExpression } from './ast'
+import { SCOPED_SLOT_IDENTIFIER } from './transforms/utils'
+import { genBabelExpr } from './codegen'
+
+export interface ImportItem {
+  exp: string | ExpressionNode
+  path: string
+}
 
 export type NodeTransform = (
   node: RootNode | TemplateChildNode,
@@ -60,22 +84,37 @@ export interface ErrorHandlingOptions {
   onError?: (error: CompilerError) => void
 }
 
+export const enum BindingComponentTypes {
+  SELF = 'self',
+  SETUP = 'setup',
+  UNKNOWN = 'unknown',
+}
 export interface TransformContext
-  extends Required<Omit<TransformOptions, 'filename'>> {
+  extends Required<Omit<TransformOptions, 'filename' | 'root'>> {
   selfName: string | null
   currentNode: RootNode | TemplateChildNode | null
   parent: ParentNode | null
   childIndex: number
   helpers: Map<symbol, number>
   components: Set<string>
+  imports: ImportItem[]
+  autoImportFilters: Array<Omit<MiniProgramFilterOptions, 'code'>>
+  bindingComponents: Record<
+    string,
+    { type: BindingComponentTypes; name: string }
+  >
   identifiers: { [name: string]: number | undefined }
   cached: number
   scopes: {
     vFor: number
+    vueId: number
   }
   scope: CodegenRootScope
   currentScope: CodegenScope
+  currentVueId: string
+  vueIds: string[]
   inVOnce: boolean
+  inVFor: boolean
   helper<T extends symbol>(name: T): T
   removeHelper<T extends symbol>(name: T): void
   helperString(name: symbol): string
@@ -85,9 +124,13 @@ export interface TransformContext
   addIdentifiers(exp: ExpressionNode | string): void
   removeIdentifiers(exp: ExpressionNode | string): void
   popScope(): CodegenScope | undefined
+  getScopeIndex(scope: CodegenScope): number
   addVIfScope(initScope: CodegenVIfScopeInit): CodegenVIfScope
   addVForScope(initScope: CodegenVForScopeInit): CodegenVForScope
   cache<T extends JSChildNode>(exp: T, isVNode?: boolean): CacheExpression | T
+  isMiniProgramComponent(name: string): MiniProgramComponentsType | undefined
+  rootNode: TemplateChildNode | null
+  elementRefIndex: number
 }
 
 export function isRootScope(scope: CodegenScope): scope is CodegenRootScope {
@@ -95,17 +138,47 @@ export function isRootScope(scope: CodegenScope): scope is CodegenRootScope {
 }
 
 export function isVIfScope(scope: CodegenScope): scope is CodegenVIfScope {
-  return !!(scope as CodegenVIfScope).condition
+  return (
+    !!(scope as CodegenVIfScope).condition ||
+    (scope as CodegenVIfScope).name === 'else'
+  )
 }
 
 export function isVForScope(scope: CodegenScope): scope is CodegenVForScope {
   return !!(scope as CodegenVForScope).source
 }
 
-export function transform(root: RootNode, options: TransformOptions) {
+export function isScopedSlotVFor({ source }: CodegenVForScope) {
+  if (source.type !== NodeTypes.COMPOUND_EXPRESSION) {
+    return false
+  }
+  const first = source.children[0] as ExpressionNode
+  return (
+    first.type === NodeTypes.SIMPLE_EXPRESSION &&
+    first.content.includes(SCOPED_SLOT_IDENTIFIER)
+  )
+}
+
+export function transform(root: CodegenRootNode, options: TransformOptions) {
   const context = createTransformContext(root, options)
+  findRootNode(root, context)
   traverseNode(root, context)
+  root.renderData = createRenderDataExpr(context.scope.properties, context)
+  // finalize meta information
+  root.helpers = new Set([...context.helpers.keys()])
+  root.components = [...context.components]
+  root.imports = context.imports
+  root.cached = context.cached
   return context
+}
+
+function findRootNode(root: RootNode, context: TransformContext) {
+  const children = root.children.filter(
+    (node) => node.type === NodeTypes.ELEMENT && node.tag !== 'template'
+  )
+  if (children.length === 1) {
+    context.rootNode = children[0]
+  }
 }
 
 export function traverseNode(
@@ -115,9 +188,9 @@ export function traverseNode(
   context.currentNode = node
   // apply transform plugins
   const { nodeTransforms } = context
-  const exitFns = []
+  const exitFns: Array<() => void> = []
   for (let i = 0; i < nodeTransforms.length; i++) {
-    const onExit = nodeTransforms[i](node, context)
+    const onExit = nodeTransforms[i](node, context as any)
     if (onExit) {
       if (isArray(onExit)) {
         exitFns.push(...onExit)
@@ -136,7 +209,7 @@ export function traverseNode(
 
   switch (node.type) {
     case NodeTypes.COMMENT:
-      context.helper(CREATE_COMMENT)
+      // context.helper(CREATE_COMMENT)
       break
     case NodeTypes.INTERPOLATION:
       context.helper(TO_DISPLAY_STRING)
@@ -189,17 +262,34 @@ function defaultOnWarn(msg: CompilerError) {
 }
 
 export function createTransformContext(
-  root: RootNode,
+  rootNode: RootNode,
   {
+    isX = false,
+    root = '',
     filename = '',
     isTS = false,
     inline = false,
+    hashId = null,
+    scopeId = null,
+    filters = [],
+    bindingCssVars = [],
     bindingMetadata = EMPTY_OBJ,
     cacheHandlers = false,
     prefixIdentifiers = false,
     skipTransformIdentifier = false,
+    renderDataSpread = false,
     nodeTransforms = [],
     directiveTransforms = {},
+    miniProgram = {
+      class: {
+        array: true,
+      },
+      slot: {
+        fallbackContent: false,
+        dynamicSlotNames: true,
+      },
+      directive: '',
+    },
     isBuiltInComponent = NOOP,
     isCustomElement = NOOP,
     expressionPlugins = [],
@@ -207,10 +297,21 @@ export function createTransformContext(
     onWarn = defaultOnWarn,
   }: TransformOptions
 ): TransformContext {
-  const scope: CodegenRootScope = {
+  const rootScope: CodegenRootScope = {
     id: new IdentifierGenerator(),
     identifiers: [],
     properties: [],
+    parent: null,
+  }
+
+  function findVIfParentScope(): CodegenVForScope | CodegenRootScope {
+    for (let i = scopes.length - 1; i >= 0; i--) {
+      const scope = scopes[i]
+      if (isVForScope(scope) || isRootScope(scope)) {
+        return scope
+      }
+    }
+    return rootScope
   }
 
   function createScope(
@@ -221,6 +322,7 @@ export function createTransformContext(
       {
         id,
         properties: [],
+        parent: scopes[scopes.length - 1],
         get identifiers() {
           return Object.keys(identifiers)
         },
@@ -228,14 +330,30 @@ export function createTransformContext(
       initScope
     )
   }
+
+  const vueIds: string[] = []
   const identifiers = Object.create(null)
-  const scopes: CodegenScope[] = [scope]
-  const nameMatch = filename.replace(/\?.*$/, '').match(/([^/\\]+)\.\w+$/)
+  const scopes: CodegenScope[] = [rootScope]
+
+  const miniProgramComponents = findMiniProgramUsingComponents({
+    filename,
+    componentsDir: miniProgram.component?.dir,
+    inputDir: root,
+  })
+  // const nameMatch = filename.replace(/\?.*$/, '').match(/([^/\\]+)\.\w+$/)
   const context: TransformContext = {
     // options
-    selfName: nameMatch && capitalize(camelize(nameMatch[1])),
+    // 暂不提供根据文件名生成递归组件
+    isX,
+    selfName: '', //nameMatch && capitalize(camelize(nameMatch[1])),
+    miniProgram,
     isTS,
     inline,
+    hashId,
+    scopeId,
+    filters,
+    autoImportFilters: [],
+    bindingCssVars,
     bindingMetadata,
     cacheHandlers,
     prefixIdentifiers,
@@ -243,6 +361,7 @@ export function createTransformContext(
     directiveTransforms,
     expressionPlugins,
     skipTransformIdentifier,
+    renderDataSpread,
     isBuiltInComponent,
     isCustomElement,
     onError,
@@ -252,26 +371,46 @@ export function createTransformContext(
     childIndex: 0,
     helpers: new Map(),
     components: new Set(),
+    imports: [],
+    bindingComponents: Object.create(null),
     cached: 0,
     identifiers,
-    scope,
+    scope: rootScope,
     scopes: {
       vFor: 0,
+      vueId: 0,
     },
     get currentScope() {
       return scopes[scopes.length - 1]
     },
-    currentNode: root,
+    currentNode: rootNode,
+    vueIds,
+    get currentVueId() {
+      return vueIds[vueIds.length - 1]
+    },
     inVOnce: false,
+    get inVFor() {
+      let parent: CodegenScope | null = scopes[scopes.length - 1]
+      while (parent) {
+        if (isVForScope(parent) && !isScopedSlotVFor(parent)) {
+          return true
+        }
+        parent = parent.parent
+      }
+      return false
+    },
     // methods
+    getScopeIndex(scope: CodegenScope) {
+      return scopes.indexOf(scope)
+    },
     popScope() {
       return scopes.pop()
     },
     addVIfScope(initScope) {
       const vIfScope = createScope(
         scopes[scopes.length - 1].id,
-        initScope
-      ) as CodegenVIfScope
+        extend(initScope, { parentScope: findVIfParentScope() })
+      ) as unknown as CodegenVIfScope
       scopes.push(vIfScope)
       return vIfScope
     },
@@ -354,6 +493,11 @@ export function createTransformContext(
     cache(exp, isVNode = false) {
       return createCacheExpression(context.cached++, exp, isVNode)
     },
+    isMiniProgramComponent(name) {
+      return miniProgramComponents[name]
+    },
+    rootNode: null,
+    elementRefIndex: 0,
   }
 
   function addId(id: string) {
@@ -404,18 +548,18 @@ export function createStructuralDirectiveTransform(
       const { props } = node
       // structural directive transforms are not concerned with slots
       // as they are handled separately in vSlot.ts
-      if (node.tagType === ElementTypes.TEMPLATE && props.some(isVSlot)) {
-        return
-      }
-      const exitFns = []
+      // if (node.tagType === ElementTypes.TEMPLATE && props.some(isVSlot)) {
+      //   return
+      // }
+      const exitFns: Array<() => void> = []
       for (let i = 0; i < props.length; i++) {
         const prop = props[i]
         if (prop.type === NodeTypes.DIRECTIVE && matches(prop.name)) {
           // structural directives are removed to avoid infinite recursion
           // also we remove them *before* applying so that it can further
           // traverse itself in case it moves the node around
-          // props.splice(i, 1)
-          // i--
+          props.splice(i, 1)
+          i--
           const onExit = fn(node, prop, context)
           if (onExit) exitFns.push(onExit)
         }
@@ -423,4 +567,189 @@ export function createStructuralDirectiveTransform(
       return exitFns
     }
   }
+}
+
+function createRenderDataExpr(
+  properties: (ObjectProperty | SpreadElement)[],
+  context: TransformContext
+) {
+  const objExpr = createObjectExpression(properties)
+  if (!hasSpreadElement(objExpr)) {
+    return objExpr
+  }
+  // filters: ['test']
+  // v-if="text.aa()"
+  if (context.filters.length) {
+    transformFilterObjectSpreadExpr(objExpr, context)
+  }
+  if (context.renderDataSpread) {
+    return objExpr
+  }
+  return transformObjectSpreadExpr(objExpr, context)
+}
+
+function hasSpreadElement(expr: ObjectExpression): boolean {
+  return expr.properties.some((prop) => {
+    if (isSpreadElement(prop)) {
+      return true
+    } else {
+      const returnStatement = parseReturnStatement(prop as ObjectProperty)
+      if (returnStatement) {
+        return hasSpreadElement(returnStatement.argument as ObjectExpression)
+      }
+    }
+  })
+}
+
+// 目前硬编码识别 _f,应该读取 context.helperString
+const returnObjExprMap = {
+  _f: 1, // _f(_ctx.items,()=>{return {}})
+  _w: 0, // _w(()=>{return {}})
+}
+
+function parseReturnStatement(prop: ObjectProperty) {
+  if (
+    isObjectProperty(prop) &&
+    isCallExpression(prop.value) &&
+    isIdentifier(prop.value.callee)
+  ) {
+    const { name } = prop.value.callee as Identifier
+    if (hasOwn(returnObjExprMap, name)) {
+      return (
+        (
+          prop.value.arguments[
+            returnObjExprMap[name]
+          ] as ArrowFunctionExpression
+        ).body as BlockStatement
+      ).body[0] as ReturnStatement
+    }
+  }
+}
+
+function transformObjectPropertyExpr(
+  prop: ObjectProperty,
+  context: TransformContext
+) {
+  // vFor,withScopedSlot
+  const returnStatement = parseReturnStatement(prop)
+  if (returnStatement) {
+    const objExpr = returnStatement.argument as ObjectExpression
+    if (hasSpreadElement(objExpr)) {
+      returnStatement.argument = transformObjectSpreadExpr(objExpr, context)
+    }
+  }
+  return prop
+}
+
+function transformObjectSpreadExpr(
+  objExpr: ObjectExpression,
+  context: TransformContext
+) {
+  const properties = objExpr.properties as (ObjectProperty | SpreadElement)[]
+  const args: (ObjectExpression | ConditionalExpression)[] = []
+  let objExprProperties: ObjectProperty[] = []
+  properties.forEach((prop) => {
+    if (isObjectProperty(prop)) {
+      objExprProperties.push(transformObjectPropertyExpr(prop, context))
+    } else {
+      if (objExprProperties.length) {
+        args.push(objectExpression(objExprProperties))
+      }
+      args.push(
+        transformConditionalExpression(
+          prop.argument as ConditionalExpression,
+          context
+        )
+      )
+      objExprProperties = []
+    }
+  })
+  if (objExprProperties.length) {
+    args.push(objectExpression(objExprProperties))
+  }
+  if (args.length === 1) {
+    return args[0] as ObjectExpression
+  }
+  return callExpression(identifier(context.helperString(EXTEND)), args)
+}
+function transformConditionalExpression(
+  expr: ConditionalExpression,
+  context: TransformContext
+) {
+  const { consequent, alternate } = expr
+  if (isObjectExpression(consequent) && hasSpreadElement(consequent)) {
+    expr.consequent = transformObjectSpreadExpr(consequent, context)
+  }
+  if (isObjectExpression(alternate)) {
+    if (hasSpreadElement(alternate)) {
+      expr.alternate = transformObjectSpreadExpr(alternate, context)
+    }
+  } else if (isConditionalExpression(alternate)) {
+    transformConditionalExpression(alternate, context)
+  }
+  return expr
+}
+
+function transformFilterObjectSpreadExpr(
+  objExpr: ObjectExpression,
+  context: TransformContext
+) {
+  const properties = objExpr.properties as (ObjectProperty | SpreadElement)[]
+  properties.forEach((prop) => {
+    if (isObjectProperty(prop)) {
+      transformFilterObjectPropertyExpr(prop, context)
+    } else {
+      prop.argument = transformFilterConditionalExpression(
+        prop.argument as ConditionalExpression,
+        context
+      )
+    }
+  })
+}
+
+function transformFilterObjectPropertyExpr(
+  prop: ObjectProperty,
+  context: TransformContext
+) {
+  // vFor, withScopedSlot
+  const returnStatement = parseReturnStatement(prop)
+  if (returnStatement) {
+    const objExpr = returnStatement.argument as ObjectExpression
+    if (hasSpreadElement(objExpr)) {
+      transformFilterObjectSpreadExpr(objExpr, context)
+    }
+  }
+}
+function transformFilterConditionalExpression(
+  expr: ConditionalExpression,
+  context: TransformContext
+) {
+  const { test, consequent, alternate } = expr
+  if (isObjectExpression(consequent) && hasSpreadElement(consequent)) {
+    transformFilterObjectSpreadExpr(consequent, context)
+  }
+  if (isObjectExpression(alternate)) {
+    if (hasSpreadElement(alternate)) {
+      transformFilterObjectSpreadExpr(alternate, context)
+    }
+  } else if (isConditionalExpression(alternate)) {
+    expr.alternate = transformFilterConditionalExpression(alternate, context)
+  }
+  const testCode = genBabelExpr(test)
+  // filter test
+  if (context.filters.find((filter) => testCode.includes(filter + '.'))) {
+    // test.aa() ? {a:1} : {b:2} => {...{a:1},...{b:2}}
+    const properties: SpreadElement[] = []
+    if (!isObjectExpression(consequent) || consequent.properties.length) {
+      properties.push(spreadElement(consequent))
+    }
+    if (
+      !isObjectExpression(expr.alternate) ||
+      expr.alternate.properties.length
+    ) {
+      properties.push(spreadElement(expr.alternate))
+    }
+    return objectExpression(properties)
+  }
+  return expr
 }

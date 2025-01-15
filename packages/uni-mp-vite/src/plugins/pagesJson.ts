@@ -1,75 +1,169 @@
-import fs from 'fs'
 import path from 'path'
-import { Plugin } from 'vite'
-
+import debug from 'debug'
+import type { Plugin, ResolvedConfig } from 'vite'
 import {
-  AppJson,
+  type AppJson,
+  MANIFEST_JSON_JS,
+  addMiniProgramAppJson,
+  addMiniProgramPageJson,
   defineUniPagesJsonPlugin,
+  findChangedJsonFiles,
   getLocaleFiles,
+  initI18nOptionsOnce,
+  mergeMiniProgramAppJson,
   normalizePagePath,
-  normalizeNodeModules,
+  normalizePath,
   parseManifestJsonOnce,
   parseMiniProgramPagesJson,
+  parseVueRequest,
+  removeExt,
+  runByHBuilderX,
 } from '@dcloudio/uni-cli-shared'
-import { virtualPagePath } from './virtual'
-import { UniMiniProgramPluginOptions } from '../plugin'
+import { virtualPagePath } from './entry'
+import type { UniMiniProgramPluginOptions } from '../plugin'
+import { parseI18nJson } from '@dcloudio/uni-i18n'
+
+const debugPagesJson = debug('uni:pages-json')
+
+const nvueCssPathsCache = new Map<ResolvedConfig, string[]>()
+export function getNVueCssPaths(config: ResolvedConfig) {
+  return nvueCssPathsCache.get(config)
+}
 
 export function uniPagesJsonPlugin(
   options: UniMiniProgramPluginOptions
 ): Plugin {
-  let appJson: AppJson
+  let resolvedConfig: ResolvedConfig
+  const platform = process.env.UNI_PLATFORM
+  const inputDir = process.env.UNI_INPUT_DIR
   return defineUniPagesJsonPlugin((opts) => {
+    let allPagePaths: string[] = []
+    let isFirst = true
     return {
-      name: 'vite:uni-mp-pages-json',
+      name: 'uni:mp-pages-json',
       enforce: 'pre',
+      configResolved(config) {
+        resolvedConfig = config
+      },
       transform(code, id) {
-        if (!opts.filter(id)) {
-          return
+        if (process.env.UNI_APP_X === 'true') {
+          if (isFirst && allPagePaths.length) {
+            const { filename } = parseVueRequest(id)
+            if (filename.endsWith('.vue') || filename.endsWith('.uvue')) {
+              const vueFilename = removeExt(
+                normalizePath(
+                  path.relative(process.env.UNI_INPUT_DIR, filename)
+                )
+              )
+              // 项目内的
+              if (!vueFilename.startsWith('.')) {
+                // const index = allPagePaths.indexOf(pagePath)
+                // if (index > -1) {
+                if (runByHBuilderX()) {
+                  console.log(
+                    `当前工程${
+                      allPagePaths.length
+                    }个页面，正在编译${vueFilename}...${'\u200b'}`
+                  )
+                }
+                // }
+              }
+            }
+          }
         }
-        const inputDir = process.env.UNI_INPUT_DIR
+        if (!opts.filter(id)) {
+          return null
+        }
         this.addWatchFile(path.resolve(inputDir, 'pages.json'))
         getLocaleFiles(path.resolve(inputDir, 'locale')).forEach((filepath) => {
           this.addWatchFile(filepath)
         })
         const manifestJson = parseManifestJsonOnce(inputDir)
-        const res = parseMiniProgramPagesJson(code, process.env.UNI_PLATFORM, {
-          debug: !!manifestJson.debug,
-          darkmode:
-            options.app.darkmode &&
-            fs.existsSync(path.resolve(inputDir, 'theme.json')),
-          networkTimeout: manifestJson.networkTimeout,
-          subpackages: options.app.subpackages,
+        const { appJson, pageJsons, nvuePages } = parseMiniProgramPagesJson(
+          code,
+          platform,
+          {
+            debug: !!manifestJson.debug,
+            darkmode: options.app.darkmode,
+            networkTimeout: manifestJson.networkTimeout,
+            subpackages: !!options.app.subpackages,
+            ...options.json,
+          }
+        )
+        nvueCssPathsCache.set(
+          resolvedConfig,
+          nvuePages.map((pagePath) => pagePath + options.style.extname)
+        )
+
+        // add source
+        mergeMiniProgramAppJson(
+          appJson,
+          manifestJson[platform],
+          options.project?.source ?? {}
+        )
+
+        if (options.json?.formatAppJson) {
+          options.json.formatAppJson(appJson, manifestJson, pageJsons)
+        }
+        // 使用 once 获取的话，可以节省编译时间，但 i18n 内容发生变化时，pages.json 不会自动更新
+        const i18nOptions = initI18nOptionsOnce(platform, inputDir, false, true)
+        if (i18nOptions) {
+          const { locale, locales, delimiters } = i18nOptions
+          parseI18nJson(appJson, locales[locale], delimiters)
+          parseI18nJson(pageJsons, locales[locale], delimiters)
+        }
+
+        const { normalize } = options.app
+        addMiniProgramAppJson(normalize ? normalize(appJson) : appJson)
+        Object.keys(pageJsons).forEach((name) => {
+          if (isNormalPage(name)) {
+            addMiniProgramPageJson(name, pageJsons[name])
+            allPagePaths.push(name)
+          }
         })
-        appJson = res.appJson
-        Object.keys(res.pageJsons).forEach((name) => {
-          this.emitFile({
-            fileName: normalizeNodeModules(name) + '.json',
-            type: 'asset',
-            source: JSON.stringify(res.pageJsons[name], null, 2),
-          })
-        })
+
         return {
-          code: `import './manifest.json.js'\n` + importPagesCode(appJson),
-          map: this.getCombinedSourcemap(),
+          code: `import './${MANIFEST_JSON_JS}'\n` + importPagesCode(appJson),
+          map: { mappings: '' },
         }
       },
       generateBundle() {
-        if (appJson) {
-          this.emitFile({
-            fileName: `app.json`,
-            type: 'asset',
-            source: JSON.stringify(appJson, null, 2),
-          })
-        }
+        findChangedJsonFiles(options.app.usingComponents).forEach(
+          (value, key) => {
+            debugPagesJson('json.changed', key)
+            this.emitFile({
+              type: 'asset',
+              fileName: key + '.json',
+              source: value,
+            })
+          }
+        )
+      },
+      buildEnd() {
+        isFirst = false
       },
     }
   })
+}
+/**
+ * 字节跳动小程序可以配置 ext:// 开头的插件页面模板，如 ext://microapp-trade-plugin/order-confirm
+ * @param pagePath
+ * @returns
+ */
+function isNormalPage(pagePath: string) {
+  return !pagePath.startsWith('ext://')
 }
 
 function importPagesCode(pagesJson: AppJson) {
   const importPagesCode: string[] = []
   function importPageCode(pagePath: string) {
-    const pagePathWithExtname = normalizePagePath(pagePath, 'app')
+    if (!isNormalPage(pagePath)) {
+      return
+    }
+    const pagePathWithExtname = normalizePagePath(
+      pagePath,
+      process.env.UNI_PLATFORM
+    )
     if (pagePathWithExtname) {
       importPagesCode.push(`import('${virtualPagePath(pagePathWithExtname)}')`)
     }

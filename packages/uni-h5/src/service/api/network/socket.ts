@@ -1,20 +1,24 @@
-import { extend, capitalize } from '@vue/shared'
+import { capitalize, extend, isFunction, isString } from '@vue/shared'
 import {
-  defineTaskApi,
+  API_CLOSE_SOCKET,
+  API_CONNECT_SOCKET,
+  API_SEND_SOCKET_MESSAGE,
+  type API_TYPE_CLOSE_SOCKET,
+  type API_TYPE_CONNECT_SOCKET,
+  type API_TYPE_SEND_SOCKET_MESSAGE,
+  CloseSocketProtocol,
+  ConnectSocketOptions,
+  ConnectSocketProtocol,
+  SendSocketMessageProtocol,
   defineAsyncApi,
   defineOnApi,
-  API_CONNECT_SOCKET,
-  API_TYPE_CONNECT_SOCKET,
-  ConnectSocketProtocol,
-  ConnectSocketOptions,
-  API_SEND_SOCKET_MESSAGE,
-  API_TYPE_SEND_SOCKET_MESSAGE,
-  SendSocketMessageProtocol,
-  API_CLOSE_SOCKET,
-  API_TYPE_CLOSE_SOCKET,
-  CloseSocketProtocol,
+  defineTaskApi,
 } from '@dcloudio/uni-api'
 import { callOptions } from '@dcloudio/uni-shared'
+import type {
+  ConnectSocketFail,
+  SendSocketMessageErrorCode,
+} from '@dcloudio/uni-app-x/types/uni'
 
 type eventName = keyof WebSocketEventMap
 
@@ -56,11 +60,12 @@ class SocketTask implements UniApp.SocketTask {
       eventNames.forEach((name: eventName) => {
         this._callbacks[name] = []
         webSocket.addEventListener(name, (event) => {
+          const { data, code, reason } = <any>event
           const res =
             name === 'message'
-              ? {
-                  data: (<any>event).data,
-                }
+              ? { data }
+              : name === 'close'
+              ? { code, reason }
               : {}
           this._callbacks[name].forEach((callback) => {
             try {
@@ -109,17 +114,31 @@ class SocketTask implements UniApp.SocketTask {
    * 发送
    * @param {any} data
    */
-  send(options: UniApp.SendSocketMessageOptions) {
+  send(
+    options: UniApp.SendSocketMessageOptions &
+      Pick<UniApp.CloseSocketOptions, 'fail'>
+  ) {
     const data = (options || {}).data
     const ws = <WebSocket>this._webSocket
+    type CallOptions = {
+      errMsg: string
+      errCode: SendSocketMessageErrorCode
+    }
     try {
       if (ws.readyState !== ws.OPEN) {
+        callOptions(options, {
+          errMsg: `sendSocketMessage:fail SocketTask.readyState is not OPEN`,
+          errCode: 10002,
+        } as CallOptions)
         throw new Error('SocketTask.readyState is not OPEN')
       }
       ws.send(data)
       callOptions(options, 'sendSocketMessage:ok')
     } catch (error) {
-      callOptions(options, `sendSocketMessage:fail ${error}`)
+      callOptions(options, {
+        errMsg: `sendSocketMessage:fail ${error}`,
+        errCode: 602001,
+      } as CallOptions)
     }
   }
 
@@ -133,7 +152,7 @@ class SocketTask implements UniApp.SocketTask {
     try {
       const code = options.code || 1000
       const reason = options.reason
-      if (typeof reason === 'string') {
+      if (isString(reason)) {
         ws.close(code, reason)
       } else {
         ws.close(code)
@@ -165,7 +184,9 @@ export const connectSocket = defineTaskApi<API_TYPE_CONNECT_SOCKET>(
       protocols,
       (error: Error, socketTask: SocketTask) => {
         if (error) {
-          reject(error.toString())
+          reject<Partial<ConnectSocketFail>>(error.toString(), {
+            errCode: 600009,
+          })
           return
         }
         socketTasks.push(socketTask)
@@ -184,15 +205,17 @@ function callSocketTask(
   resolve: Function,
   reject: Function
 ) {
-  const fn = socketTask[method]
-  if (typeof fn === 'function') {
+  const fn = socketTask[method] as
+    | (typeof socketTask)['send']
+    | (typeof socketTask)['close']
+  if (isFunction(fn)) {
     fn.call(
       socketTask,
       extend({}, option, {
         success() {
           resolve()
         },
-        fail({ errMsg }: any) {
+        fail({ errMsg }: { errMsg: string }) {
           reject(errMsg.replace('sendSocketMessage:fail ', ''))
         },
         complete: undefined,
@@ -214,7 +237,7 @@ export const sendSocketMessage = defineAsyncApi<API_TYPE_SEND_SOCKET_MESSAGE>(
   SendSocketMessageProtocol
 )
 
-export const closeSocket = <API_TYPE_CLOSE_SOCKET>defineAsyncApi(
+export const closeSocket = defineAsyncApi<API_TYPE_CLOSE_SOCKET>(
   API_CLOSE_SOCKET,
   (options, { resolve, reject }) => {
     const socketTask = socketTasks[0]

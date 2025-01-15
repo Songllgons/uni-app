@@ -1,18 +1,25 @@
 import path from 'path'
-import { Plugin, ResolvedConfig } from 'vite'
+import type { Plugin, ResolvedConfig } from 'vite'
 
 import { extend } from '@vue/shared'
 
 import {
   API_DEPS_CSS,
   COMMON_EXCLUDE,
-  InjectOptions,
+  type InjectOptions,
   buildInCssSet,
-  uniViteInjectPlugin,
   isCombineBuiltInCss,
+  isEnableTreeShaking,
+  parseManifestJsonOnce,
+  uniViteInjectPlugin,
 } from '@dcloudio/uni-cli-shared'
 
-const apiJson = require(path.resolve(__dirname, '../../lib/api.json'))
+const apiJson = require(path.resolve(
+  __dirname,
+  process.env.UNI_APP_X === 'true'
+    ? '../../lib/api.x.json'
+    : '../../lib/api.json'
+))
 const uniInjectPluginOptions: Partial<InjectOptions> = {
   exclude: [...COMMON_EXCLUDE],
   'uni.': [
@@ -32,10 +39,13 @@ const uniInjectPluginOptions: Partial<InjectOptions> = {
 
 export function uniInjectPlugin(): Plugin {
   let resolvedConfig: ResolvedConfig
+
+  const apiDepsCss = API_DEPS_CSS(process.env.UNI_APP_X === 'true')
+
   const callback: InjectOptions['callback'] = function (imports, mod) {
     const styles =
       mod[0] === '@dcloudio/uni-h5' &&
-      API_DEPS_CSS[mod[1] as keyof typeof API_DEPS_CSS]
+      apiDepsCss[mod[1] as keyof typeof apiDepsCss]
     if (!styles) {
       return
     }
@@ -49,20 +59,31 @@ export function uniInjectPlugin(): Plugin {
       }
     })
   }
-  const injectPlugin = uniViteInjectPlugin(
-    extend(uniInjectPluginOptions, {
-      callback,
-    })
-  )
+  let injectPlugin: Plugin
+
   return {
-    name: 'vite:uni-h5-inject',
+    name: 'uni:h5-inject',
     apply: 'build',
     enforce: 'post',
     configResolved(config) {
       resolvedConfig = config
+      const enableTreeShaking = isEnableTreeShaking(
+        parseManifestJsonOnce(process.env.UNI_INPUT_DIR)
+      )
+      if (!enableTreeShaking) {
+        // 不启用摇树优化，移除 wx、uni 等 API 配置
+        delete uniInjectPluginOptions['wx.']
+        delete uniInjectPluginOptions['uni.']
+      }
+      injectPlugin = uniViteInjectPlugin(
+        'uni:h5-inject',
+        extend(uniInjectPluginOptions, {
+          callback,
+        })
+      )
     },
     transform(code, id) {
-      return injectPlugin.transform!.call(this, code, id)
+      return (injectPlugin.transform as Function).call(this, code, id)
     },
   }
 }

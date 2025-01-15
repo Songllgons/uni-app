@@ -1,4 +1,4 @@
-import { UniNodeJSON, UniNodeJSONMinify } from './Node'
+import type { UniNodeJSON, UniNodeJSONMinify } from './Node'
 
 export const ACTION_TYPE_PAGE_CREATE = 1
 export const ACTION_TYPE_PAGE_CREATED = 2
@@ -31,6 +31,8 @@ export interface PageNodeOptions {
   statusbarHeight: number
   windowTop: number
   windowBottom: number
+  // 仅限 app-harmony 使用
+  nvueFlexDirection?: string
 }
 
 export interface PageCreateData extends PageNodeOptions {}
@@ -58,8 +60,15 @@ export type CreateAction = [
  * nodeId
  * parentNodeId
  * refNodeId
+ * nodeJson
  */
-export type InsertAction = [typeof ACTION_TYPE_INSERT, number, number, number]
+export type InsertAction = [
+  typeof ACTION_TYPE_INSERT,
+  number,
+  number,
+  number,
+  Partial<UniNodeJSON | UniNodeJSONMinify>?
+]
 
 /**
  * nodeId

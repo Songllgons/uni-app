@@ -1,5 +1,6 @@
-import { Friction } from './Friction'
-import { Spring } from './Spring'
+import { isFunction } from '@vue/shared'
+import type { Friction } from './Friction'
+import type { Spring } from './Spring'
 import { Scroll } from './Scroll'
 
 interface Animation {
@@ -233,7 +234,7 @@ export class Scroller {
             this._position = c
             this.updatePosition()
           }
-          if (typeof this._options.onSnap === 'function') {
+          if (isFunction(this._options.onSnap)) {
             this._options.onSnap(
               Math.floor(Math.abs(this._position) / this._itemSize)
             )
@@ -265,7 +266,7 @@ export class Scroller {
     if (this._position !== i) {
       this._snapping = true
       this.scrollTo(-i)
-      if (typeof this._options.onSnap === 'function') {
+      if (isFunction(this._options.onSnap)) {
         this._options.onSnap(
           Math.floor(Math.abs(this._position) / this._itemSize)
         )
@@ -295,7 +296,7 @@ export class Scroller {
   }
   dispatchScroll() {
     if (
-      typeof this._options.onScroll === 'function' &&
+      isFunction(this._options.onScroll) &&
       Math.round(Number(this._lastPos)) !== Math.round(this._position)
     ) {
       this._lastPos = this._position
@@ -342,7 +343,7 @@ export class Scroller {
     this.updatePosition()
     if (position !== this._position) {
       this.dispatchScroll()
-      if (typeof this._options.onSnap === 'function') {
+      if (isFunction(this._options.onSnap)) {
         this._options.onSnap(
           Math.floor(Math.abs(this._position) / this._itemSize)
         )

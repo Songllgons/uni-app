@@ -1,4 +1,4 @@
-import { ParserOptions } from '@vue/compiler-core'
+import type { ParserOptions } from '@vue/compiler-core'
 import namedCharacterReferences from './namedChars.json'
 
 // lazy compute this to make this file tree-shakable for browser
@@ -42,7 +42,7 @@ export const decodeHtml: ParserOptions['decodeEntities'] = (
           )
         }
         for (let length = maxCRNameLength; !value && length > 0; --length) {
-          name = rawText.substr(1, length)
+          name = rawText.slice(1, 1 + length)
           value = (namedCharacterReferences as Record<string, string>)[name]
         }
         if (value) {

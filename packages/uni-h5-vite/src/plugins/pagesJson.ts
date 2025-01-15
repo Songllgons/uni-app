@@ -1,28 +1,51 @@
-import path from 'path'
-import { Plugin, ResolvedConfig } from 'vite'
+import type { Plugin, ResolvedConfig } from 'vite'
 import {
   API_DEPS_CSS,
-  FEATURE_DEFINES,
-  H5_FRAMEWORK_STYLE_PATH,
   BASE_COMPONENTS_STYLE_PATH,
-  normalizeIdentifier,
-  normalizePagesJson,
+  type FEATURE_DEFINES,
+  H5_FRAMEWORK_STYLE_PATH,
+  MANIFEST_JSON_JS,
+  checkPagesJson,
+  createRollupError,
   defineUniPagesJsonPlugin,
-  normalizePagesRoute,
+  isEnableTreeShaking,
+  normalizeIdentifier,
   normalizePagePath,
-  normalizePath,
+  normalizePagesJson,
+  normalizePagesRoute,
+  parseManifestJsonOnce,
+  preUVueJson,
 } from '@dcloudio/uni-cli-shared'
-
-const pkg = require('@dcloudio/vite-plugin-uni/package.json')
+import { isSSR } from '../utils'
 
 export function uniPagesJsonPlugin(): Plugin {
   return defineUniPagesJsonPlugin((opts) => {
     return {
-      name: 'vite:uni-h5-pages-json',
+      name: 'uni:h5-pages-json',
       enforce: 'pre',
-      transform(code, id, ssr) {
+      transform(code, id, opt) {
         if (opts.filter(id)) {
           const { resolvedConfig } = opts
+          const ssr = isSSR(opt)
+          if (process.env.UNI_APP_X === 'true') {
+            // 调整换行符，确保 parseTree 的loc正确
+            code = code.replace(/\r\n/g, '\n')
+            try {
+              checkPagesJson(preUVueJson(code), process.env.UNI_INPUT_DIR)
+            } catch (err: any) {
+              if (err.loc) {
+                const error = createRollupError(
+                  'uni:app-pages',
+                  'pages.json',
+                  err,
+                  code
+                )
+                this.error(error)
+              } else {
+                throw err
+              }
+            }
+          }
           return {
             code:
               registerGlobalCode(resolvedConfig, ssr) +
@@ -47,16 +70,13 @@ function generatePagesJsonCode(
   const definePagesCode = generatePagesDefineCode(pagesJson, config)
   const uniRoutesCode = generateRoutes(globalName, pagesJson, config)
   const uniConfigCode = generateConfig(globalName, pagesJson, config)
-  const manifestJsonPath = normalizePath(
-    path.resolve(process.env.UNI_INPUT_DIR, 'manifest.json.js')
-  )
   const cssCode = generateCssCode(config)
-
+  const vueType = process.env.UNI_APP_X === 'true' ? 'uvue' : 'nvue'
   return `
 import { defineAsyncComponent, resolveComponent, createVNode, withCtx, openBlock, createBlock } from 'vue'
-import { PageComponent, AsyncLoadingComponent, AsyncErrorComponent, useI18n, setupWindow } from '@dcloudio/uni-h5'
-import { appid, debug, networkTimeout, router, async, sdkConfigs, qqMapKey, googleMapKey, nvue, locale, fallbackLocale } from '${manifestJsonPath}'
-const locales = import.meta.globEager('./locale/*.json')
+import { PageComponent, useI18n, setupWindow, setupPage } from '@dcloudio/uni-h5'
+import { appId, appName, appVersion, appVersionCode, debug, networkTimeout, router, async, sdkConfigs, qqMapKey, googleMapKey, aMapKey, bMapKey, aMapSecurityJsCode, aMapServiceHost, ${vueType}, locale, fallbackLocale, darkmode, themeConfig } from './${MANIFEST_JSON_JS}'
+const locales = import.meta.glob('./locale/*.json', { eager: true })
 ${importLayoutComponentsCode}
 const extend = Object.assign
 ${cssCode}
@@ -81,25 +101,25 @@ function getGlobal(ssr?: boolean) {
 // 兼容 wx 对象
 function registerGlobalCode(config: ResolvedConfig, ssr?: boolean) {
   const name = getGlobal(ssr)
-  if (config.command === 'build' && !ssr) {
-    // 非SSR的发行模式，补充全局 uni 对象
-    return `${name}.uni = {};${name}.wx = {}`
+  const enableTreeShaking = isEnableTreeShaking(
+    parseManifestJsonOnce(process.env.UNI_INPUT_DIR)
+  )
+
+  if (enableTreeShaking && config.command === 'build' && !ssr) {
+    // 非 SSR 的发行模式，补充全局 uni 对象
+    return `import { upx2px, getApp } from '@dcloudio/uni-h5';${name}.uni = {};${name}.wx = {};${name}.rpx2px = upx2px`
   }
 
-  const rpx2pxCode =
-    !ssr && config.define!.__UNI_FEATURE_RPX__
-      ? `import {upx2px} from '@dcloudio/uni-h5'
-  ${name}.rpx2px = upx2px
-`
-      : ''
-  return `${rpx2pxCode}
-import {uni,getCurrentPages,getApp,UniServiceJSBridge,UniViewJSBridge} from '@dcloudio/uni-h5'
+  return `
+import {uni,upx2px,getCurrentPages,getApp,UniServiceJSBridge,UniViewJSBridge} from '@dcloudio/uni-h5'
 ${name}.getApp = getApp
 ${name}.getCurrentPages = getCurrentPages
 ${name}.wx = uni
 ${name}.uni = uni
 ${name}.UniViewJSBridge = UniViewJSBridge
 ${name}.UniServiceJSBridge = UniServiceJSBridge
+${name}.rpx2px = upx2px
+${name}.__setupPage = (com)=>setupPage(com)
 `
 }
 
@@ -121,19 +141,29 @@ function generateCssCode(config: ResolvedConfig) {
   if (define.__UNI_FEATURE_TABBAR__) {
     cssFiles.push(H5_FRAMEWORK_STYLE_PATH + 'tabBar.css')
   }
-  if (define.__UNI_FEATURE_NVUE__) {
-    cssFiles.push(H5_FRAMEWORK_STYLE_PATH + 'nvue.css')
+  // x 项目直接集成 uvue.css
+  if (process.env.UNI_APP_X === 'true') {
+    cssFiles.push(H5_FRAMEWORK_STYLE_PATH + 'uvue.css')
+  } else {
+    if (define.__UNI_FEATURE_NVUE__) {
+      cssFiles.push(H5_FRAMEWORK_STYLE_PATH + 'nvue.css')
+    }
   }
+
   if (define.__UNI_FEATURE_PULL_DOWN_REFRESH__) {
     cssFiles.push(H5_FRAMEWORK_STYLE_PATH + 'pageRefresh.css')
   }
   if (define.__UNI_FEATURE_NAVIGATIONBAR_SEARCHINPUT__) {
     cssFiles.push(BASE_COMPONENTS_STYLE_PATH + 'input.css')
   }
-  if (config.command === 'serve') {
-    // 开发模式，自动添加所有API相关css
-    Object.keys(API_DEPS_CSS).forEach((name) => {
-      const styles = API_DEPS_CSS[name as keyof typeof API_DEPS_CSS]
+  const enableTreeShaking = isEnableTreeShaking(
+    parseManifestJsonOnce(process.env.UNI_INPUT_DIR)
+  )
+  if (config.command === 'serve' || !enableTreeShaking) {
+    const apiDepsCss = API_DEPS_CSS(process.env.UNI_APP_X === 'true')
+    // 开发模式或禁用摇树优化，自动添加所有API相关css
+    Object.keys(apiDepsCss).forEach((name) => {
+      const styles = apiDepsCss[name as keyof typeof apiDepsCss]
       styles.forEach((style) => {
         if (!cssFiles.includes(style)) {
           cssFiles.push(style)
@@ -178,7 +208,7 @@ function generatePageDefineCode(pageOptions: UniApp.PagesJsonPageOptions) {
     pagePathWithExtname = pageOptions.path + '.vue'
   }
   const pageIdent = normalizeIdentifier(pageOptions.path)
-  return `const ${pageIdent}Loader = ()=>import('./${pagePathWithExtname}?mpType=page')
+  return `const ${pageIdent}Loader = ()=>import('./${pagePathWithExtname}').then(com => setupPage(com.default || com))
 const ${pageIdent} = defineAsyncComponent(extend({loader:${pageIdent}Loader},AsyncComponentOptions))`
 }
 
@@ -189,13 +219,27 @@ function generatePagesDefineCode(
   const { pages } = pagesJson
   return (
     `const AsyncComponentOptions = {
-  loadingComponent: AsyncLoadingComponent,
-  errorComponent: AsyncErrorComponent,
-  delay: async.delay,
-  timeout: async.timeout,
-  suspensible: async.suspensible
-}
-` + pages.map((pageOptions) => generatePageDefineCode(pageOptions)).join('\n')
+      delay: async.delay,
+      timeout: async.timeout,
+      suspensible: async.suspensible
+    }
+    if(async.loading){
+      AsyncComponentOptions.loadingComponent = {
+        name:'SystemAsyncLoading',
+        render(){
+          return createVNode(resolveComponent(async.loading))
+        }
+      }
+    }
+    if(async.error){
+      AsyncComponentOptions.errorComponent = {
+        name:'SystemAsyncError',
+        render(){
+          return createVNode(resolveComponent(async.error))
+        }
+      }
+    }
+  ` + pages.map((pageOptions) => generatePageDefineCode(pageOptions)).join('\n')
   )
 }
 
@@ -205,9 +249,12 @@ function generatePageRoute(
 ) {
   const { isEntry } = meta
   const alias = isEntry ? `\n  alias:'/${path}',` : ''
+  // 目前单页面未处理 query=>props
   return `{
   path:'/${isEntry ? '' : path}',${alias}
-  component:{setup(){return ()=>renderPage(${normalizeIdentifier(path)})}},
+  component:{setup(){ const app = getApp(); const query = app && app.$route && app.$route.query || {}; return ()=>renderPage(${normalizeIdentifier(
+    path
+  )},query)}},
   loader: ${normalizeIdentifier(path)}Loader,
   meta: ${JSON.stringify(meta)}
 }`
@@ -228,14 +275,14 @@ function generateRoutes(
   config: ResolvedConfig
 ) {
   return `
-function renderPage(component){
-  return (openBlock(), createBlock(PageComponent, null, {page: withCtx(() => [createVNode(component, { ref: "page" }, null, 512 /* NEED_PATCH */)]), _: 1 /* STABLE */}))
+function renderPage(component,props){
+  return (openBlock(), createBlock(PageComponent, null, {page: withCtx(() => [createVNode(component, extend({},props,{ref: "page"}), null, 512 /* NEED_PATCH */)]), _: 1 /* STABLE */}))
 }
 ${globalName}.__uniRoutes=[${[
     ...generatePagesRoute(normalizePagesRoute(pagesJson), config),
   ].join(
     ','
-  )}].map(uniRoute=>(uniRoute.meta.route = (uniRoute.alias || uniRoute.path).substr(1),uniRoute))`
+  )}].map(uniRoute=>(uniRoute.meta.route = (uniRoute.alias || uniRoute.path).slice(1),uniRoute))`
 }
 
 function generateConfig(
@@ -246,26 +293,42 @@ function generateConfig(
   delete pagesJson.pages
   delete pagesJson.subPackages
   delete pagesJson.subpackages
-  pagesJson.compilerVersion = pkg['uni-app'].compilerVersion
-  return (
-    (config.command === 'serve'
-      ? ''
-      : `${globalName}['____'+appid+'____']=true
-delete ${globalName}['____'+appid+'____']
-`) +
-    `${globalName}.__uniConfig=extend(${JSON.stringify(pagesJson)},{
+  pagesJson.compilerVersion = process.env.UNI_COMPILER_VERSION
+  const isX = process.env.UNI_APP_X === 'true'
+  const vueType = isX ? 'uvue' : 'nvue'
+  let tabBarCode = ''
+  if (isX) {
+    const tabBar = pagesJson.tabBar
+    delete pagesJson.tabBar
+    tabBarCode = `${globalName}.__uniConfig.getTabBarConfig = () => {return ${
+      tabBar ? JSON.stringify(tabBar) : 'undefined'
+    }};
+    ${globalName}.__uniConfig.tabBar = __uniConfig.getTabBarConfig();`
+  }
+  return `${isX ? `${globalName}.__uniX = true` : ''}
+  ${globalName}.__uniConfig=extend(${JSON.stringify(pagesJson)},{
+  appId,
+  appName,
+  appVersion,
+  appVersionCode,
   async,
   debug,
   networkTimeout,
   sdkConfigs,
   qqMapKey,
+  bMapKey,
   googleMapKey,
-  nvue,
+  aMapKey,
+  aMapSecurityJsCode,
+  aMapServiceHost,
+  ${vueType},
   locale,
   fallbackLocale,
   locales:Object.keys(locales).reduce((res,name)=>{const locale=name.replace(/\\.\\/locale\\/(uni-app.)?(.*).json/,'$2');extend(res[locale]||(res[locale]={}),locales[name].default);return res},{}),
   router,
+  darkmode,
+  themeConfig,
 })
+${tabBarCode}
 `
-  )
 }

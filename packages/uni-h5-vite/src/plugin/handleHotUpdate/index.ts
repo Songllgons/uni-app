@@ -1,16 +1,20 @@
 import path from 'path'
 import debug from 'debug'
-import { ModuleGraph, Plugin } from 'vite'
+import type { ModuleGraph, Plugin } from 'vite'
 import { extend } from '@vue/shared'
 import {
+  MANIFEST_JSON_JS,
+  PAGES_JSON_JS,
   initEasycomsOnce,
   initFeatures,
   normalizePath,
   parseManifestJson,
   parsePagesJson,
+  resolveBuiltIn,
+  resolveComponentsLibDirs,
 } from '@dcloudio/uni-cli-shared'
 
-const debugHmr = debug('vite:uni:hmr')
+const debugHmr = debug('uni:hmr')
 
 async function invalidate(file: string, moduleGraph: ModuleGraph) {
   const mods = await moduleGraph.getModulesByFile(normalizePath(file))
@@ -28,12 +32,16 @@ export function createHandleHotUpdate(): Plugin['handleHotUpdate'] {
     const platform = process.env.UNI_PLATFORM
     if (!invalidateFiles) {
       invalidateFiles = [
-        path.resolve(inputDir, 'pages.json.js'),
-        path.resolve(inputDir, 'manifest.json.js'),
-        require.resolve('@dcloudio/uni-h5/dist/uni-h5.es.js'),
+        path.resolve(inputDir, PAGES_JSON_JS),
+        path.resolve(inputDir, MANIFEST_JSON_JS),
+        resolveBuiltIn(
+          '@dcloudio/uni-h5/' +
+            (process.env.UNI_APP_X === 'true' ? 'dist-x' : 'dist') +
+            '/uni-h5.es.js'
+        ),
       ]
       try {
-        invalidateFiles.push(require.resolve('vite/dist/client/env.mjs'))
+        invalidateFiles.push(resolveBuiltIn('vite/dist/client/env.mjs'))
       } catch (e) {}
     }
     // TODO 目前简单处理，当pages.json,manifest.json发生变化，就直接刷新，理想情况下，应该区分变化的内容，仅必要时做整页面刷新
@@ -50,7 +58,7 @@ export function createHandleHotUpdate(): Plugin['handleHotUpdate'] {
       server: { middlewareMode },
     } = server.config
     extend(
-      define,
+      define!,
       initFeatures({
         inputDir,
         command: 'serve',
@@ -63,7 +71,11 @@ export function createHandleHotUpdate(): Plugin['handleHotUpdate'] {
     debugHmr('define', define)
     if (isPagesJson) {
       const easycom = pagesJson.easycom || {}
-      const { options, refresh } = initEasycomsOnce(inputDir, platform)
+      const { options, refresh } = initEasycomsOnce(inputDir, {
+        dirs: resolveComponentsLibDirs(),
+        platform,
+        isX: process.env.UNI_APP_X === 'true',
+      })
       if (
         !equal(
           { autoscan: easycom.autoscan, custom: easycom.custom },

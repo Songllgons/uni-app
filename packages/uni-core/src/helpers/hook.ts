@@ -1,7 +1,24 @@
-import { ComponentPublicInstance } from 'vue'
-import { isString } from '@vue/shared'
+import type { ComponentPublicInstance } from 'vue'
+import { isArray, isString, remove } from '@vue/shared'
 import { invokeArrayFns } from '@dcloudio/uni-shared'
 import { getCurrentPageVm } from './page'
+import { get$pageByPage } from './util'
+
+export function removeHook(
+  vm: ComponentPublicInstance,
+  name: string,
+  hook: Function & { __weh?: Function }
+) {
+  const hooks = (vm.$ as unknown as { [name: string]: Function[] })[
+    name as string
+  ]
+  if (!isArray(hooks)) {
+    return
+  }
+  if (hook.__weh) {
+    remove(hooks, hook.__weh)
+  }
+}
 
 export function invokeHook(name: string, args?: unknown): unknown
 export function invokeHook(id: number, name: string, args?: unknown): unknown
@@ -20,7 +37,9 @@ export function invokeHook(
     name = vm
     vm = getCurrentPageVm()!
   } else if (typeof vm === 'number') {
-    const page = getCurrentPages().find((page) => page.$page.id === vm)
+    const page = getCurrentPages().find(
+      (page) => get$pageByPage(page).id === vm
+    )
     if (page) {
       vm = (page as any).$vm as ComponentPublicInstance
     } else {
@@ -36,13 +55,17 @@ export function invokeHook(
       return (vm as any).__call_hook(name, args)
     }
   }
-  const hooks = vm.$[name as string]
+  const hooks = (vm.$ as unknown as { [name: string]: Function[] })[
+    name as string
+  ]
   return hooks && invokeArrayFns(hooks, args)
 }
 
 export function hasHook(vm: ComponentPublicInstance | number, name: string) {
   if (typeof vm === 'number') {
-    const page = getCurrentPages().find((page) => page.$page.id === vm)
+    const page = getCurrentPages().find(
+      (page) => get$pageByPage(page).id === vm
+    )
     if (page) {
       vm = (page as any).$vm as ComponentPublicInstance
     } else {
@@ -52,6 +75,8 @@ export function hasHook(vm: ComponentPublicInstance | number, name: string) {
   if (!vm) {
     return false
   }
-  const hooks = vm.$[name]
+  const hooks = (vm.$ as unknown as { [name: string]: Function[] })[
+    name as string
+  ]
   return !!(hooks && hooks.length)
 }

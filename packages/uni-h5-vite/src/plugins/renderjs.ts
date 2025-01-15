@@ -1,14 +1,13 @@
 import debug from 'debug'
-import { Plugin } from 'vite'
-import { rewriteDefault } from '@vue/compiler-sfc'
+import type { Plugin } from 'vite'
 
 import { missingModuleName, parseRenderjs } from '@dcloudio/uni-cli-shared'
 
-const debugRenderjs = debug('vite:uni:renderjs')
+const debugRenderjs = debug('uni:h5-renderjs')
 
 export function uniRenderjsPlugin(): Plugin {
   return {
-    name: 'vite:uni-h5-renderjs',
+    name: 'uni:h5-renderjs',
     transform(code, id) {
       const { type, name } = parseRenderjs(id)
       if (!type) {
@@ -18,11 +17,14 @@ export function uniRenderjsPlugin(): Plugin {
       if (!name) {
         this.error(missingModuleName(type, code))
       }
-      return `${rewriteDefault(
-        code.replace(/module\.exports\s*=/, 'export default '),
-        '_sfc_' + type
-      )}
-${type === 'renderjs' ? genRenderjsCode(name) : genWxsCode(name)}`
+      return {
+        code: `${require('@vue/compiler-sfc').rewriteDefault(
+          code.replace(/module\.exports\s*=/, 'export default '),
+          '_sfc_' + type
+        )}
+${type === 'renderjs' ? genRenderjsCode(name) : genWxsCode(name)}`,
+        map: { mappings: '' },
+      }
     },
   }
 }
@@ -32,7 +34,7 @@ function genRenderjsCode(name: string) {
   if(!Comp.$renderjs){Comp.$renderjs = []}
   Comp.$renderjs.push('${name}')
   if(!Comp.mixins){Comp.mixins = []}
-  Comp.mixins.push({beforeCreate(){ this['${name}'] = this }})
+  Comp.mixins.push({beforeCreate(){ this['${name}'] = this },mounted(){ this.$ownerInstance = this.$gcd(this, true) }})
   Comp.mixins.push(_sfc_renderjs)
 }`
 }

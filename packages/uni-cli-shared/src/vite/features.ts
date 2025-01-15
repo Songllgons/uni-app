@@ -1,6 +1,6 @@
 import fs from 'fs'
 import path from 'path'
-import { ConfigEnv } from 'vite'
+import type { ConfigEnv } from 'vite'
 import { extend, isArray, isString } from '@vue/shared'
 
 interface ProjectFeatures {
@@ -35,6 +35,7 @@ interface ManifestFeatures {
   routerMode: '"hash"' | '"history"'
   vueOptionsApi: boolean
   vueProdDevTools: boolean
+  vueProdHydrationMismatchDetails: boolean
 }
 
 function initProjectFeature({ inputDir }: InitFeaturesOptions) {
@@ -182,17 +183,19 @@ function initManifestFeature({
     routerMode: '"hash"',
     vueOptionsApi: true,
     vueProdDevTools: false,
+    vueProdHydrationMismatchDetails: false,
   }
 
   if (command === 'build') {
     // TODO 需要预编译一遍？
-    features.wxs = false
-    features.longpress = false
+    // features.wxs = false
+    // features.longpress = false
   }
+  const webManifest = manifestJson.web || manifestJson.h5
   if (
-    manifestJson.h5 &&
-    manifestJson.h5.router &&
-    manifestJson.h5.router.mode === 'history'
+    webManifest &&
+    webManifest.router &&
+    webManifest.router.mode === 'history'
   ) {
     features.routerMode = '"history"'
   }
@@ -226,6 +229,7 @@ export function initFeatures(options: InitFeaturesOptions) {
     i18nLocale,
     vueOptionsApi,
     vueProdDevTools,
+    vueProdHydrationMismatchDetails,
     pages,
     tabBar,
     tabBarMidButton,
@@ -245,10 +249,12 @@ export function initFeatures(options: InitFeaturesOptions) {
     initPagesFeature(options),
     initProjectFeature(options)
   )
+  // uni-app-x运行时可调用$setPageStyle，需启用相关特性方可支持。否则$setPageStyle无效果
   const features = {
     // vue
     __VUE_OPTIONS_API__: vueOptionsApi, // enable/disable Options API support, default: true
     __VUE_PROD_DEVTOOLS__: vueProdDevTools, // enable/disable devtools support in production, default: false
+    __VUE_PROD_HYDRATION_MISMATCH_DETAILS__: vueProdHydrationMismatchDetails,
     // uni
     __UNI_FEATURE_WX__: wx, // 是否启用小程序的组件实例 API，如：selectComponent 等（uni-core/src/service/plugin/appConfig）
     __UNI_FEATURE_WXS__: wxs, // 是否启用 wxs 支持，如：getComponentDescriptor 等（uni-core/src/view/plugin/appConfig）

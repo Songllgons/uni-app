@@ -1,30 +1,38 @@
 import {
-  ref,
-  withCtx,
-  computed,
-  ComputedRef,
+  type ComponentPublicInstance,
+  type ComputedRef,
   KeepAlive,
-  openBlock,
+  type Ref,
+  type SetupContext,
+  computed,
   createBlock,
   createVNode,
-  SetupContext,
-  resolveDynamicComponent,
-  defineComponent,
-  reactive,
-  onMounted,
-  ComponentPublicInstance,
-  Ref,
-  watch,
+  type defineComponent,
   nextTick,
+  onMounted,
+  openBlock,
+  reactive,
+  ref,
+  resolveDynamicComponent,
+  watch,
+  withCtx,
 } from 'vue'
 
 import { RouterView } from 'vue-router'
 
 import { defineSystemComponent } from '@dcloudio/uni-components'
-import { updateCssVar } from '@dcloudio/uni-core'
+import { getRouteOptions, updateCssVar } from '@dcloudio/uni-core'
 import { useTabBar } from '../../setup/state'
-import { useKeepAliveRoute } from '../../setup/page'
-import { resolveOwnerEl, RESPONSIVE_MIN_WIDTH } from '@dcloudio/uni-shared'
+import {
+  getCurrentBasePages,
+  getPage$BasePage,
+  useKeepAliveRoute,
+} from '../../setup/page'
+import {
+  ON_NAVIGATION_BAR_CHANGE,
+  RESPONSIVE_MIN_WIDTH,
+  resolveOwnerEl,
+} from '@dcloudio/uni-shared'
 import { checkMinWidth } from '../../../helpers/dom'
 import { hasOwn } from '@vue/shared'
 
@@ -111,6 +119,7 @@ interface LayoutState {
   marginWidth: number
   leftWindowWidth: number
   rightWindowWidth: number
+  navigationBarTitleText: string
   topWindowStyle: unknown
   leftWindowStyle: unknown
   rightWindowStyle: unknown
@@ -147,8 +156,25 @@ function useMaxWidth(
   const route = usePageRoute()
   function checkMaxWidth() {
     const windowWidth = document.body.clientWidth
+
+    const pages = getCurrentBasePages()
+    let meta = {} as UniApp.PageRouteMeta
+    if (pages.length > 0) {
+      const curPage = pages[pages.length - 1]
+      meta = getPage$BasePage(curPage).meta
+    } else {
+      const routeOptions = getRouteOptions(route.path, true)
+      if (routeOptions) {
+        meta = routeOptions.meta
+      }
+    }
+
     const maxWidth = parseInt(
-      String(__uniConfig.globalStyle.maxWidth || Number.MAX_SAFE_INTEGER)
+      String(
+        (hasOwn(meta, 'maxWidth')
+          ? meta.maxWidth
+          : __uniConfig.globalStyle.maxWidth) || Number.MAX_SAFE_INTEGER
+      )
     )
     let showMaxWidth = false
     if (windowWidth > maxWidth) {
@@ -190,12 +216,29 @@ function useState() {
     // max width
     const layoutState = reactive({
       marginWidth: 0,
+      leftWindowWidth: 0,
+      rightWindowWidth: 0,
     }) as LayoutState
     watch(
       () => layoutState.marginWidth,
       (value) => updateCssVar({ '--window-margin': value + 'px' })
     )
-    return { layoutState }
+    watch(
+      () => layoutState.leftWindowWidth + layoutState.marginWidth,
+      (value) => {
+        updateCssVar({ '--window-left': value + 'px' })
+      }
+    )
+    watch(
+      () => layoutState.rightWindowWidth + layoutState.marginWidth,
+      (value) => {
+        updateCssVar({ '--window-right': value + 'px' })
+      }
+    )
+    return {
+      layoutState,
+      windowState: computed<WindowState>(() => ({})),
+    }
   }
   const topWindowMediaQuery = ref(false)
   const leftWindowMediaQuery = ref(false)
@@ -232,6 +275,7 @@ function useState() {
     marginWidth: 0,
     leftWindowWidth: 0,
     rightWindowWidth: 0,
+    navigationBarTitleText: '',
     topWindowStyle: {},
     leftWindowStyle: {},
     rightWindowStyle: {},
@@ -267,13 +311,20 @@ function useState() {
   )
   watch(
     () => layoutState.leftWindowWidth + layoutState.marginWidth,
-    (value) => updateCssVar({ '--window-left': value + 'px' })
+    (value) => {
+      updateCssVar({ '--window-left': value + 'px' })
+    }
   )
   watch(
     () => layoutState.rightWindowWidth + layoutState.marginWidth,
-    (value) => updateCssVar({ '--window-right': value + 'px' })
+    (value) => {
+      updateCssVar({ '--window-right': value + 'px' })
+    }
   )
-  const windowState: WindowState = reactive({
+  UniServiceJSBridge.on(ON_NAVIGATION_BAR_CHANGE, (navigationBar) => {
+    layoutState.navigationBarTitleText = navigationBar.titleText
+  })
+  const windowState = computed<WindowState>(() => ({
     matchTopWindow: layoutState.topWindowMediaQuery,
     showTopWindow: layoutState.showTopWindow || layoutState.apiShowTopWindow,
     matchLeftWindow: layoutState.leftWindowMediaQuery,
@@ -281,7 +332,7 @@ function useState() {
     matchRightWindow: layoutState.rightWindowMediaQuery,
     showRightWindow:
       layoutState.showRightWindow || layoutState.apiShowRightWindow,
-  })
+  }))
   return {
     layoutState,
     windowState,
@@ -290,8 +341,8 @@ function useState() {
 
 function createLayoutTsx(
   keepAliveRoute: KeepAliveRoute,
-  layoutState?: LayoutState,
-  windowState?: WindowState,
+  layoutState: LayoutState,
+  windowState: ComputedRef<WindowState>,
   topWindow?: unknown,
   leftWindow?: unknown,
   rightWindow?: unknown
@@ -304,13 +355,13 @@ function createLayoutTsx(
     return routerVNode
   }
   const topWindowTsx = __UNI_FEATURE_TOPWINDOW__
-    ? createTopWindowTsx(topWindow, layoutState!, windowState!)
+    ? createTopWindowTsx(topWindow, layoutState, windowState.value)
     : null
   const leftWindowTsx = __UNI_FEATURE_LEFTWINDOW__
-    ? createLeftWindowTsx(leftWindow, layoutState!, windowState!)
+    ? createLeftWindowTsx(leftWindow, layoutState, windowState.value)
     : null
   const rightWindowTsx = __UNI_FEATURE_RIGHTWINDOW__
-    ? createRightWindowTsx(rightWindow, layoutState!, windowState!)
+    ? createRightWindowTsx(rightWindow, layoutState, windowState.value)
     : null
   return (
     <uni-layout
@@ -457,7 +508,11 @@ function createTopWindowTsx(
         v-show={layoutState.showTopWindow || layoutState.apiShowTopWindow}
       >
         <div class="uni-top-window" style={layoutState.topWindowStyle as any}>
-          <TopWindow ref={windowRef} {...windowState} />
+          <TopWindow
+            ref={windowRef}
+            navigation-bar-title-text={layoutState.navigationBarTitleText}
+            {...windowState}
+          />
         </div>
         <div
           class="uni-top-window--placeholder"

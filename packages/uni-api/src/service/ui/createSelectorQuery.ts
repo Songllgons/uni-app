@@ -1,12 +1,14 @@
-import { ComponentPublicInstance } from 'vue'
+import type { ComponentInternalInstance, ComponentPublicInstance } from 'vue'
+import { isArray, isFunction } from '@vue/shared'
+import { resolveComponentInstance } from '@dcloudio/uni-shared'
 import { getCurrentPageVm, getPageIdByVm } from '@dcloudio/uni-core'
+import { requestComponentInfo } from '@dcloudio/uni-platform'
+import type { getContextInfo } from '@dcloudio/uni-components'
 import { defineSyncApi } from '../../helpers/api'
 import { CanvasContext } from '../context/canvas'
 import { EditorContext } from '../context/editor'
 import { MapContext } from '../context/createMapContext'
 import { VideoContext } from '../context/createVideoContext'
-import { requestComponentInfo } from '@dcloudio/uni-platform'
-import { getContextInfo } from '@dcloudio/uni-components'
 
 type NodeField = UniApp.NodeField
 export interface SelectorQueryNodeInfo
@@ -16,6 +18,7 @@ export interface SelectorQueryNodeInfo
       'top' | 'bottom' | 'left' | 'right' | 'height' | 'width'
     > {
   contextInfo?: ReturnType<typeof getContextInfo>
+  node?: any
 }
 
 export interface SelectorQueryRequest {
@@ -58,7 +61,9 @@ class NodesRef implements UniApp.NodesRef {
     this._single = single
   }
 
-  boundingClientRect(callback: (result: SelectorQueryNodeInfo) => void) {
+  boundingClientRect(
+    callback?: (result: SelectorQueryNodeInfo | SelectorQueryNodeInfo[]) => void
+  ) {
     this._selectorQuery._push(
       this._selector,
       this._component,
@@ -112,6 +117,19 @@ class NodesRef implements UniApp.NodesRef {
     )
     return this._selectorQuery
   }
+
+  node(callback: (result: any) => void) {
+    this._selectorQuery._push(
+      this._selector,
+      this._component,
+      this._single,
+      {
+        node: true,
+      },
+      callback
+    )
+    return this._selectorQuery
+  }
 }
 
 class SelectorQuery implements UniApp.SelectorQuery {
@@ -130,21 +148,21 @@ class SelectorQuery implements UniApp.SelectorQuery {
     requestComponentInfo(
       this._page,
       this._queue,
-      (res: Array<SelectorQueryNodeInfo | null>) => {
+      (res: Array<SelectorQueryNodeInfo | SelectorQueryNodeInfo[] | null>) => {
         const queueCbs = this._queueCb
         res.forEach((result, index) => {
-          if (Array.isArray(result)) {
+          if (isArray(result)) {
             result.forEach(convertContext)
           } else {
             convertContext(result)
           }
           const queueCb = queueCbs[index]
-          if (typeof queueCb === 'function') {
+          if (isFunction(queueCb)) {
             queueCb.call(this, result)
           }
         })
         // isFn(callback) &&
-        if (typeof callback === 'function') {
+        if (isFunction(callback)) {
           callback.call(this, res)
         }
       }
@@ -153,8 +171,8 @@ class SelectorQuery implements UniApp.SelectorQuery {
     return this._nodesRef as NodesRef
   }
 
-  in(component?: ComponentPublicInstance) {
-    this._component = component || undefined
+  in(component?: ComponentPublicInstance | ComponentInternalInstance) {
+    this._component = resolveComponentInstance(component)
     return this
   }
 
@@ -185,7 +203,7 @@ class SelectorQuery implements UniApp.SelectorQuery {
     component: ComponentPublicInstance | undefined | null,
     single: boolean,
     fields: NodeField,
-    callback: (result: SelectorQueryNodeInfo) => void
+    callback?: (result: SelectorQueryNodeInfo | SelectorQueryNodeInfo[]) => void
   ) {
     this._queue.push({
       component,
@@ -197,11 +215,12 @@ class SelectorQuery implements UniApp.SelectorQuery {
   }
 }
 
-export const createSelectorQuery = <typeof uni.createSelectorQuery>(
-  defineSyncApi('createSelectorQuery', (context?: any) => {
-    if (context && !getPageIdByVm(context)) {
-      context = null
-    }
-    return new SelectorQuery(context || getCurrentPageVm()!)
-  })
-)
+export const createSelectorQuery = defineSyncApi<
+  typeof uni.createSelectorQuery
+>('createSelectorQuery', (context?: any) => {
+  context = resolveComponentInstance(context)
+  if (context && !getPageIdByVm(context)) {
+    context = null
+  }
+  return new SelectorQuery(context || getCurrentPageVm()!)
+})

@@ -1,9 +1,9 @@
 import {
-  defineAsyncApi,
   API_SAVE_FILE,
-  API_TYPE_SAVE_FILE,
-  SaveFileProtocol,
+  type API_TYPE_SAVE_FILE,
   SaveFileOptions,
+  SaveFileProtocol,
+  defineAsyncApi,
 } from '@dcloudio/uni-api'
 import { warpPlusErrorCallback } from '../../../helpers/plus'
 import { getExtName } from '../../../helpers/file'
@@ -35,7 +35,7 @@ function getSavedFileDir(
   )
 }
 
-export const saveFile = <API_TYPE_SAVE_FILE>defineAsyncApi(
+export const saveFile = defineAsyncApi<API_TYPE_SAVE_FILE>(
   API_SAVE_FILE,
   ({ tempFilePath }, { resolve, reject }) => {
     const errorCallback = warpPlusErrorCallback(reject)

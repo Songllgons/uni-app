@@ -1,4 +1,4 @@
-import {
+import type {
   AddMediaQueryObserverArgs,
   RemoveMediaQueryObserverArgs,
 } from '@dcloudio/uni-api'
@@ -8,7 +8,7 @@ let listeners: any = {}
 
 // 拼接媒体查询条件
 function handleMediaQueryStr($props: UniApp.DescriptorOptions) {
-  const mediaQueryArr = []
+  const mediaQueryArr: string[] = []
   const propsMenu = [
     'width',
     'minWidth',
@@ -22,7 +22,7 @@ function handleMediaQueryStr($props: UniApp.DescriptorOptions) {
     if (
       item !== 'orientation' &&
       $props[item as keyof UniApp.DescriptorOptions] &&
-      Number($props[item as keyof UniApp.DescriptorOptions] >= 0)
+      Number(($props[item as keyof UniApp.DescriptorOptions] as number) >= 0)
     ) {
       mediaQueryArr.push(
         `(${humpToLine(item)}: ${Number(

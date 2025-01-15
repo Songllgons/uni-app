@@ -20,20 +20,24 @@ export type Interceptors = { [P in HOOKS]?: Function[] }
 export const globalInterceptors: Interceptors = {}
 export const scopedInterceptors: { [key: string]: Interceptors } = {}
 
-function wrapperHook(hook: Function) {
+function wrapperHook(hook: Function, params?: Record<string, any>) {
   return function (data: unknown) {
-    return hook(data) || data
+    return hook(data, params) || data
   }
 }
 
-function queue(hooks: Function[], data: unknown): Promise<any> {
+function queue(
+  hooks: Function[],
+  data: unknown,
+  params?: Record<string, any>
+): Promise<any> {
   let promise: any = false
   for (let i = 0; i < hooks.length; i++) {
     const hook = hooks[i]
     if (promise) {
-      promise = Promise.resolve(wrapperHook(hook))
+      promise = Promise.resolve(wrapperHook(hook, params))
     } else {
-      const res = hook(data)
+      const res = hook(data, params)
       if (isPromise(res)) {
         promise = Promise.resolve(res)
       }
@@ -66,7 +70,7 @@ function wrapperOptions(
     }
     const oldCallback = options[name]
     options[name] = function callbackInterceptor(res: unknown) {
-      queue(hooks, res).then((res: unknown) => {
+      queue(hooks, res, options).then((res: unknown) => {
         return (isFunction(oldCallback) && oldCallback(res)) || res
       })
     }
@@ -75,7 +79,7 @@ function wrapperOptions(
 }
 
 export function wrapperReturnValue(method: string, returnValue: unknown) {
-  const returnValueHooks = []
+  const returnValueHooks: Function[] = []
   if (isArray(globalInterceptors.returnValue)) {
     returnValueHooks.push(...globalInterceptors.returnValue)
   }
@@ -115,14 +119,18 @@ export function invokeApi(
   method: string,
   api: Function,
   options: object,
-  ...params: []
+  params: unknown[]
 ) {
   const interceptor = getApiInterceptorHooks(method)
   if (interceptor && Object.keys(interceptor).length) {
     if (isArray(interceptor.invoke)) {
       const res = queue(interceptor.invoke, options)
       return res.then((options) => {
-        return api(wrapperOptions(interceptor, options), ...params)
+        // 重新访问 getApiInterceptorHooks, 允许 invoke 中再次调用 addInterceptor,removeInterceptor
+        return api(
+          wrapperOptions(getApiInterceptorHooks(method), options),
+          ...params
+        )
       })
     } else {
       return api(wrapperOptions(interceptor, options), ...params)

@@ -7,6 +7,8 @@ import {
 } from '@dcloudio/uni-api'
 import { fileToUrl } from '../../../helpers/file'
 import _createInput from './createInput'
+import { getInteractStatus } from '@dcloudio/uni-components'
+import { initI18nChooseFileMsgsOnce, useI18n } from '@dcloudio/uni-core'
 //#endregion
 
 //#region types
@@ -29,6 +31,8 @@ export const chooseFile = defineAsyncApi<API_TYPE_CHOOSE_FILE>(
     },
     { resolve, reject }
   ) => {
+    initI18nChooseFileMsgsOnce()
+    const { t } = useI18n()
     // TODO handle sizeType 尝试通过 canvas 压缩
     if (fileInput) {
       document.body.removeChild(fileInput)
@@ -76,6 +80,10 @@ export const chooseFile = defineAsyncApi<API_TYPE_CHOOSE_FILE>(
     })
 
     fileInput.click()
+
+    if (!getInteractStatus()) {
+      console.warn(t('uni.chooseFile.notUserActivation'))
+    }
   },
   ChooseFileProtocol,
   ChooseFileOptions

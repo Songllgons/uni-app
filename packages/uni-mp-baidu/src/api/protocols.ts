@@ -1,10 +1,14 @@
 export {
   redirectTo,
-  navigateTo,
   previewImage,
   getSystemInfo,
   getSystemInfoSync,
+  onError,
+  offError,
+  onSocketOpen,
+  onSocketMessage,
 } from '@dcloudio/uni-mp-core'
+import { navigateTo as _navigateTo, isSyncApi } from '@dcloudio/uni-mp-core'
 
 function createTodoMethod(contextName: string, methodName: string) {
   return function unsupported() {
@@ -13,6 +17,21 @@ function createTodoMethod(contextName: string, methodName: string) {
 }
 
 type Data = Record<string, any>
+
+export function returnValue(methodName: string, res: Record<string, any> = {}) {
+  if (isSyncApi(methodName)) {
+    return res
+  }
+  // 通用 returnValue 解析
+  if (res.error || res.errorMessage) {
+    res.errMsg = `${methodName}:fail ${res.errorMessage || res.error}`
+    delete res.error
+    delete res.errorMessage
+  } else {
+    res.errMsg = `${methodName}:ok`
+  }
+  return res
+}
 
 export const request = {
   args() {
@@ -76,6 +95,10 @@ export const showShareMenu = {
   name: 'openShare',
 }
 
+export const login = {
+  name: 'getLoginCode',
+}
+
 export const getAccountInfoSync = {
   name: 'getEnvInfoSync',
   returnValue(fromRes: Data, toRes: UniApp.AccountInfo) {
@@ -88,3 +111,5 @@ export const getAccountInfoSync = {
     }
   },
 }
+
+export const navigateTo = _navigateTo()

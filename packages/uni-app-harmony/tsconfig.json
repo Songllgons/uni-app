@@ -1,0 +1,13 @@
+{
+  "extends": "../../tsconfig.json",
+  "compilerOptions": {
+    "target": "ES2020",
+    "paths": {
+      "@dcloudio/*": ["packages/*/src"],
+      "@dcloudio/uni-app-plus/*": ["packages/uni-app-plus/src/*"],
+      "@dcloudio/uni-h5/*": ["packages/uni-h5/src/*"],
+      "@dcloudio/uni-platform": ["packages/uni-app-harmony/src/platform/index.ts"]
+    }
+  },
+  "include": ["src"]
+}

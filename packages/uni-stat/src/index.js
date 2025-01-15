@@ -1,12 +1,16 @@
-import Stat from './stat.js'
+import { get_platform_name, get_page_vm, is_debug } from './utils/pageInfo.js'
+import Stat from './core/stat.js'
 const stat = Stat.getInstance()
+
+// 用于判断是隐藏页面还是卸载页面
 let isHide = false
+
 const lifecycle = {
   onLaunch(options) {
-    stat.report(options, this)
-  },
-  onReady() {
-    stat.ready(this)
+    // 进入应用上报数据
+    stat.launch(options, this)
+    // 上报push推送id
+    stat.pushEvent(options)
   },
   onLoad(options) {
     stat.load(options, this)
@@ -39,18 +43,55 @@ const lifecycle = {
   },
 }
 
-function main() {
-  if (process.env.NODE_ENV === 'development') {
-    uni.report = function (type, options) {}
-  } else {
-    uni.onAppLaunch((options) => {
-      stat.report(options)
-      // 小程序平台此时也无法获取getApp，统一在options中传递一个app对象
-      options.app.$vm.$.appContext.app.mixin(lifecycle)
-      uni.report = function (type, options) {
-        stat.sendEvent(type, options)
-      }
+// 加载统计代码
+function load_stat() {
+  // #ifdef VUE3
+  uni.onCreateVueApp((app) => {
+    app.mixin(lifecycle)
+    uni.report = function (type, options) {
+      stat.sendEvent(type, options)
+    }
+  })
+
+  if (get_platform_name() !== 'h5' && get_platform_name() !== 'n') {
+    uni.onAppHide(() => {
+      stat.appHide(get_page_vm())
     })
+    uni.onAppShow(() => {
+      stat.appShow(get_page_vm())
+    })
+  }
+  // #endif
+
+  // #ifndef VUE3
+  // eslint-disable-next-line no-restricted-globals
+  const Vue = require('vue')
+  ;(Vue.default || Vue).mixin(lifecycle)
+  uni.report = function (type, options) {
+    stat.sendEvent(type, options)
+  }
+  // #endif
+}
+
+function main() {
+  if (is_debug) {
+    if (__STAT_VERSION__ === '1') {
+      // #ifndef APP-NVUE
+      console.log('=== uni统计开启,version:1.0 ===')
+      // #endif
+    }
+    if (__STAT_VERSION__ === '2') {
+      // #ifndef APP-NVUE
+      console.log('=== uni统计开启,version:2.0 ===')
+      // #endif
+    }
+    load_stat()
+  } else {
+    if (process.env.NODE_ENV === 'development') {
+      uni.report = function (type, options) {}
+    } else {
+      load_stat()
+    }
   }
 }
 

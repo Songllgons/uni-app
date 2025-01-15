@@ -1,24 +1,26 @@
 import {
+  API_CLOSE_PREVIEW_IMAGE,
   API_PREVIEW_IMAGE,
-  API_TYPE_PREVIEW_IMAGE,
-  defineAsyncApi,
-  PreviewImageProtocol,
+  type API_TYPE_CLOSE_PREVIEW_IMAGE,
+  type API_TYPE_PREVIEW_IMAGE,
   PreviewImageOptions,
+  PreviewImageProtocol,
+  defineAsyncApi,
 } from '@dcloudio/uni-api'
 
-import { isPlainObject } from '@vue/shared'
+import { isFunction, isPlainObject } from '@vue/shared'
 
-import { initI18nChooseImageMsgsOnce, useI18n } from '@dcloudio/uni-core'
+import { initI18nPreviewImageMsgsOnce, useI18n } from '@dcloudio/uni-core'
 
 import { getRealPath } from '../../../platform/getRealPath'
 
-export const previewImage = <API_TYPE_PREVIEW_IMAGE>defineAsyncApi(
+export const previewImage = defineAsyncApi<API_TYPE_PREVIEW_IMAGE>(
   API_PREVIEW_IMAGE,
   (
     { current = 0, indicator = 'number', loop = false, urls, longPressActions },
     { resolve, reject }
   ) => {
-    initI18nChooseImageMsgsOnce()
+    initI18nPreviewImageMsgsOnce()
     const { t } = useI18n()
 
     urls = urls.map((url) => getRealPath(url))
@@ -36,7 +38,7 @@ export const previewImage = <API_TYPE_PREVIEW_IMAGE>defineAsyncApi(
       indicator,
       loop,
       onLongPress: function (res: any) {
-        let itemList = []
+        let itemList: string[] = []
         let itemColor = ''
 
         const hasLongPressActions =
@@ -65,8 +67,8 @@ export const previewImage = <API_TYPE_PREVIEW_IMAGE>defineAsyncApi(
         plus.nativeUI.actionSheet(options, (e) => {
           if (e.index > 0) {
             if (hasLongPressActions) {
-              typeof longPressActions!.success === 'function' &&
-                longPressActions!.success({
+              isFunction(longPressActions.success) &&
+                longPressActions.success({
                   tapIndex: e.index - 1,
                   index: res.index,
                 })
@@ -83,8 +85,8 @@ export const previewImage = <API_TYPE_PREVIEW_IMAGE>defineAsyncApi(
               }
             )
           } else if (hasLongPressActions) {
-            typeof longPressActions!.fail === 'function' &&
-              longPressActions!.fail({
+            isFunction(longPressActions.fail) &&
+              longPressActions.fail({
                 errMsg: 'showActionSheet:fail cancel',
               })
           }
@@ -95,4 +97,17 @@ export const previewImage = <API_TYPE_PREVIEW_IMAGE>defineAsyncApi(
   },
   PreviewImageProtocol,
   PreviewImageOptions
+)
+
+export const closePreviewImage = defineAsyncApi<API_TYPE_CLOSE_PREVIEW_IMAGE>(
+  API_CLOSE_PREVIEW_IMAGE,
+  (_, { resolve, reject }) => {
+    try {
+      // @ts-expect-error
+      plus.nativeUI.closePreviewImage()
+      resolve()
+    } catch (error) {
+      reject()
+    }
+  }
 )

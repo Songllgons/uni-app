@@ -2,14 +2,13 @@ import { hasOwn } from '@vue/shared'
 
 import {
   API_CAN_I_USE,
-  API_TYPE_CAN_I_USE,
+  type API_TYPE_CAN_I_USE,
   CanIUseProtocol,
   defineSyncApi,
 } from '@dcloudio/uni-api'
 
-const supports = window.CSS && window.CSS.supports
-
 function cssSupports(css: string) {
+  const supports = window.CSS && window.CSS.supports
   return (
     supports &&
     (supports(css) || supports.apply(window.CSS, css.split(':') as any))

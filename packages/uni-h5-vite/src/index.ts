@@ -1,25 +1,70 @@
-import { uniCssScopedPlugin } from '@dcloudio/uni-cli-shared'
-import { UniH5Plugin } from './plugin'
+import path from 'path'
+import {
+  UNI_EASYCOM_EXCLUDE,
+  isAppVue,
+  isEnableConsole,
+  isVueSfcFile,
+  resolveUTSCompiler,
+  uniCssScopedPlugin,
+  uniDecryptUniModulesPlugin,
+  uniEncryptUniModulesAssetsPlugin,
+  uniEncryptUniModulesPlugin,
+  uniHBuilderXConsolePlugin,
+  uniUTSUVueJavaScriptPlugin,
+} from '@dcloudio/uni-cli-shared'
+import * as vueCompilerDom from '@vue/compiler-dom'
+import * as uniCliShared from '@dcloudio/uni-cli-shared'
+import { uniH5Plugin } from './plugin'
 import { uniCssPlugin } from './plugins/css'
+import { uniEasycomPlugin } from './plugins/easycom'
 import { uniInjectPlugin } from './plugins/inject'
 import { uniMainJsPlugin } from './plugins/mainJs'
 import { uniManifestJsonPlugin } from './plugins/manifestJson'
 import { uniPagesJsonPlugin } from './plugins/pagesJson'
+import { uniPostVuePlugin } from './plugins/postVue'
 import { uniRenderjsPlugin } from './plugins/renderjs'
 import { uniResolveIdPlugin } from './plugins/resolveId'
 import { uniSetupPlugin } from './plugins/setup'
 import { uniSSRPlugin } from './plugins/ssr'
+import { uniPostSourceMapPlugin } from './plugins/sourcemap'
 
-export default [
-  uniCssScopedPlugin(),
+export default () => [
+  ...(isEnableConsole() ? [uniHBuilderXConsolePlugin('uni.__f__')] : []),
+  ...(process.env.UNI_APP_X === 'true'
+    ? [
+        uniDecryptUniModulesPlugin(),
+        uniUTSUVueJavaScriptPlugin(),
+        resolveUTSCompiler().uts2js({
+          inputDir: process.env.UNI_INPUT_DIR,
+          version: process.env.UNI_COMPILER_VERSION,
+          cacheRoot: path.resolve(
+            process.env.UNI_APP_X_CACHE_DIR,
+            '.uts2js/cache'
+          ),
+          modules: {
+            vueCompilerDom,
+            uniCliShared,
+          },
+        }),
+      ]
+    : []),
+  uniEasycomPlugin({ exclude: UNI_EASYCOM_EXCLUDE }),
+  uniCssScopedPlugin({
+    filter: (id) => isVueSfcFile(id) && !isAppVue(id),
+  }),
   uniResolveIdPlugin(),
-  uniMainJsPlugin(),
-  uniManifestJsonPlugin(),
-  uniPagesJsonPlugin(),
+  ...(process.env.UNI_COMPILE_TARGET === 'uni_modules'
+    ? []
+    : [uniMainJsPlugin(), uniManifestJsonPlugin(), uniPagesJsonPlugin()]),
   uniInjectPlugin(),
   uniCssPlugin(),
   uniSSRPlugin(),
   uniSetupPlugin(),
   uniRenderjsPlugin(),
-  UniH5Plugin,
+  uniH5Plugin(),
+  ...(process.env.UNI_COMPILE_TARGET === 'uni_modules'
+    ? [uniEncryptUniModulesAssetsPlugin(), uniEncryptUniModulesPlugin()]
+    : []),
+  uniPostVuePlugin(),
+  uniPostSourceMapPlugin(),
 ]

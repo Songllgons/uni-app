@@ -1,15 +1,12 @@
-import { hasOwn, isArray } from '@vue/shared'
+import { hasOwn, hyphenate, isArray, isString } from '@vue/shared'
 import {
-  ComponentOptions,
-  ComponentInternalInstance,
-  ComponentPublicInstance,
+  type ComponentInternalInstance,
+  type ComponentOptions,
+  type ComponentPublicInstance,
+  nextTick,
 } from 'vue'
 
-import { MPComponentInstance, MPComponentOptions } from './component'
-
-export function initBehavior(options: any) {
-  return Behavior(options)
-}
+import type { MPComponentInstance, MPComponentOptions } from './component'
 
 export function initVueIds(
   vueIds: string | undefined,
@@ -42,6 +39,23 @@ export function initExtraOptions(
   })
 }
 
+const WORKLET_RE = /_(.*)_worklet_factory_/
+export function initWorkletMethods(
+  mpMethods: WechatMiniprogram.Component.MethodOption,
+  vueMethods: ComponentOptions['methods']
+) {
+  if (vueMethods) {
+    Object.keys(vueMethods).forEach((name) => {
+      const matches = name.match(WORKLET_RE)
+      if (matches) {
+        const workletName = matches[1]
+        mpMethods[name] = vueMethods[name]
+        mpMethods[workletName] = vueMethods[workletName]
+      }
+    })
+  }
+}
+
 export function initWxsCallMethods(
   methods: WechatMiniprogram.Component.MethodOption,
   wxsCallMethods: WechatMiniprogram.Component.MethodOption
@@ -63,21 +77,8 @@ function selectAllComponents(
 ) {
   const components = mpInstance.selectAllComponents(selector)
   components.forEach((component) => {
-    const ref = component.dataset.ref
+    const ref = component.properties.uR
     $refs[ref] = component.$vm || component
-    if (__PLATFORM__ === 'mp-weixin') {
-      if (component.dataset.vueGeneric === 'scoped') {
-        component
-          .selectAllComponents('.scoped-ref')
-          .forEach((scopedComponent) => {
-            selectAllComponents(
-              scopedComponent as MPComponentInstance,
-              selector,
-              $refs
-            )
-          })
-      }
-    }
   })
 }
 
@@ -88,15 +89,28 @@ export function initRefs(
   Object.defineProperty(instance, 'refs', {
     get() {
       const $refs: Record<string, any> = {}
-      selectAllComponents(mpInstance, '.vue-ref', $refs)
-      const forComponents = mpInstance.selectAllComponents('.vue-ref-in-for')
+      selectAllComponents(mpInstance, '.r', $refs)
+      const forComponents = mpInstance.selectAllComponents('.r-i-f')
       forComponents.forEach((component) => {
-        const ref = component.dataset.ref
+        const ref = component.properties.uR
+        if (!ref) {
+          return
+        }
         if (!$refs[ref]) {
           $refs[ref] = []
         }
         $refs[ref].push(component.$vm || component)
       })
+      if (__X__) {
+        const { $templateUniElementRefs } = instance
+        if ($templateUniElementRefs && $templateUniElementRefs.length) {
+          $templateUniElementRefs.forEach((templateRef) => {
+            if (isString(templateRef.r)) {
+              $refs[templateRef.r] = templateRef.v
+            }
+          })
+        }
+      }
       return $refs
     },
   })
@@ -125,18 +139,92 @@ export function findVmByVueId(
   }
 }
 
-export function getTarget(obj: any, path: string): unknown {
-  const parts = path.split('.')
-  let key: number | string = parts[0]
-  if (key.indexOf('__$n') === 0) {
-    //number index
-    key = parseInt(key.replace('__$n', ''))
+const EVENT_OPTS = 'eO'
+/**
+ * 需要搭配：
+ * ./componentInstance/index.ts:24 triggerEvent 时传递 __ins__
+ * ./componentProps.ts:49 增加 properties eO
+ * @param this
+ * @param event
+ * @returns
+ */
+export function handleEvent(
+  this: MPComponentInstance,
+  event: {
+    type: string
+    currentTarget: {
+      dataset: Record<string, any>
+    }
+    detail: {
+      __ins__: MPComponentInstance & { eO: Record<string, string> }
+    }
   }
-  if (!obj) {
-    obj = {}
+) {
+  const {
+    type,
+    currentTarget: { dataset },
+    detail: { __ins__ },
+  } = event
+  let methodName: string = type
+  // 快手小程序的 __l 方法也会走此处逻辑，但没有 __ins__
+  if (__ins__) {
+    // 自定义事件，通过 triggerEvent 传递 __ins__
+    let eventObj = {}
+    try {
+      // https://github.com/dcloudio/uni-app/issues/3647
+      // 通过字符串序列化解决百度小程序修改对象不触发组件properties变化的Bug
+      eventObj = JSON.parse(__ins__.properties[EVENT_OPTS])
+    } catch (e) {}
+    methodName = resolveMethodName(type, eventObj)
+  } else if (dataset && dataset[EVENT_OPTS]) {
+    // 快手小程序 input 等内置组件的 input 事件也会走此逻辑，所以从 dataset 中读取
+    methodName = resolveMethodName(type, dataset[EVENT_OPTS])
   }
-  if (parts.length === 1) {
-    return obj[key]
+  if (!(this as any)[methodName]) {
+    return console.warn(type + ' not found')
   }
-  return getTarget(obj[key], parts.slice(1).join('.'))
+  ;(this as any)[methodName](event)
+}
+
+function resolveMethodName(name: string, obj: Record<string, string>) {
+  return obj[name] || obj[hyphenate(name)]
+}
+/**
+ * @param properties
+ */
+export function fixProperties(properties: Record<string, any>) {
+  Object.keys(properties).forEach((name) => {
+    if (properties[name] === null) {
+      properties[name] = undefined
+    }
+  })
+}
+
+export function nextSetDataTick(mpInstance: MPComponentInstance, fn: Function) {
+  // 随便设置一个字段来触发回调（部分平台必须有字段才可以，比如头条）
+  mpInstance.setData({ r1: 1 }, () => fn())
+}
+
+export function initSetRef(mpInstance: MPComponentInstance) {
+  if (!mpInstance._$setRef) {
+    mpInstance._$setRef = (fn: Function) => {
+      nextTick(() => nextSetDataTick(mpInstance, fn))
+    }
+  }
+}
+
+let triggerEventId = 0
+
+const triggerEventDetails: Record<string, unknown> = {}
+
+export function wrapTriggerEventArgs(detail?: unknown, options?: unknown) {
+  triggerEventId++
+  triggerEventDetails[triggerEventId] = detail
+  return [triggerEventId, options]
+}
+
+export function getTriggerEventDetail(eventId: number) {
+  const detail = triggerEventDetails[eventId]
+  delete triggerEventDetails[eventId]
+  return detail
 }

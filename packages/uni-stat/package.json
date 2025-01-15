@@ -1,6 +1,6 @@
 {
   "name": "@dcloudio/uni-stat",
-  "version": "3.0.0-alpha-3021020211012005",
+  "version": "3.0.0-alpha-4040120241205001",
   "description": "@dcloudio/uni-stat",
   "main": "dist/uni-stat.es.js",
   "module": "dist/uni-stat.es.js",
@@ -18,8 +18,13 @@
   "bugs": {
     "url": "https://github.com/dcloudio/uni-app/issues"
   },
-  "uni-app": {
-    "name": "uniStat"
+  "gitHead": "33e807d66e1fe47e2ee08ad9c59247e37b8884da",
+  "dependencies": {
+    "@dcloudio/uni-cli-shared": "workspace:*",
+    "@dcloudio/uni-shared": "workspace:*",
+    "debug": "^4.3.3"
   },
-  "gitHead": "1efa8efd0a9eddeabdba75c020d015ebf31b8177"
+  "devDependencies": {
+    "@types/debug": "^4.1.7"
+  }
 }

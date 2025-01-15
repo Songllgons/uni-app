@@ -1,23 +1,35 @@
 import { hasOwn } from '@vue/shared'
 // 直接引用具体文件，避免引入其他需要额外配置的信息，比如@dcloudio/uni-platform
+//#if _X_
+import { getElementById } from './x/getElementId'
+import { createCanvasContextAsync } from './x/createCanvasContextAsync'
+//#endif
 import { upx2px } from '@dcloudio/uni-api/src/service/base/upx2px'
+import { __f__ } from '@dcloudio/uni-api/src/service/base/__f__'
 import {
   addInterceptor,
-  removeInterceptor,
   interceptors,
+  removeInterceptor,
 } from '@dcloudio/uni-api/src/service/base/interceptor'
 import {
-  $on,
-  $off,
-  $once,
   $emit,
+  $off,
+  $on,
+  $once,
 } from '@dcloudio/uni-api/src/service/base/eventBus'
+import {
+  getPushClientId,
+  invokePushCallback,
+  offPushMessage,
+  onPushMessage,
+} from '@dcloudio/uni-api/src/service/plugin/push'
+import { invokeCreateVueAppHook, onCreateVueApp } from '@dcloudio/uni-shared'
+
 import { promisify } from './promise'
 import { initWrapper } from './wrapper'
 
-import { MPProtocols } from './protocols'
-import { onAppLaunch } from './hook'
-import { getLocale, setLocale, onLocaleChange } from './locale'
+import { type MPProtocols, getEventChannel } from './protocols'
+import { getLocale, onLocaleChange, setLocale } from './locale'
 
 const baseApis = {
   $on,
@@ -25,16 +37,30 @@ const baseApis = {
   $once,
   $emit,
   upx2px,
+  rpx2px: upx2px,
   interceptors,
   addInterceptor,
   removeInterceptor,
-  onAppLaunch,
+  onCreateVueApp,
+  invokeCreateVueAppHook,
   getLocale,
   setLocale,
   onLocaleChange,
+  getPushClientId,
+  onPushMessage,
+  offPushMessage,
+  invokePushCallback,
+  __f__,
+  //#if _X_
+  getElementById,
+  createCanvasContextAsync,
+  //#endif
 }
-
-export function initUni(api: Record<string, any>, protocols: MPProtocols) {
+export function initUni(
+  api: Record<string, any>,
+  protocols: MPProtocols,
+  platform: any = __GLOBAL__
+) {
   const wrapper = initWrapper(protocols)
   const UniProxyHandlers: ProxyHandler<any> = {
     get(target: object, key: string) {
@@ -49,8 +75,21 @@ export function initUni(api: Record<string, any>, protocols: MPProtocols) {
       }
       // event-api
       // provider-api?
-      return promisify(key, wrapper(key, __GLOBAL__[key]))
+      return promisify(key, wrapper(key, platform[key]))
     },
   }
+
+  // 处理 api mp 打包后为不同js，emitter 无法共享问题
+  if (__PLATFORM__ === 'mp-alipay') {
+    platform.$emit = $emit
+    // @ts-expect-error
+    if (!my.canIUse('getOpenerEventChannel'))
+      platform.getEventChannel = getEventChannel
+  }
+  // 处理 api mp 打包后为不同js，getEventChannel 无法共享问题
+  if (__PLATFORM__ !== 'mp-weixin' && __PLATFORM__ !== 'mp-alipay') {
+    platform.getEventChannel = getEventChannel
+  }
+
   return new Proxy({}, UniProxyHandlers)
 }

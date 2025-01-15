@@ -1,6 +1,6 @@
 import {
   API_PRELOAD_PAGE,
-  API_TYPE_PRELOAD_PAGE,
+  type API_TYPE_PRELOAD_PAGE,
   PreloadPageProtocol,
   defineAsyncApi,
 } from '@dcloudio/uni-api'
@@ -30,3 +30,23 @@ export const preloadPage = defineAsyncApi<API_TYPE_PRELOAD_PAGE>(
   },
   PreloadPageProtocol
 )
+
+if (__X__ && __DEV__) {
+  document.addEventListener('DOMContentLoaded', () => {
+    console.log('Preload pages in uni-app-x development mode.')
+    __uniRoutes.reduce((prev, route) => {
+      return prev.then(() => {
+        return new Promise((resolve) => {
+          preloadPage({
+            url: route.alias || route.path,
+            complete() {
+              setTimeout(() => {
+                resolve()
+              }, 200)
+            },
+          })
+        })
+      })
+    }, Promise.resolve())
+  })
+}

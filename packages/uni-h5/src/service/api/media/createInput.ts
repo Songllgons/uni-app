@@ -1,5 +1,6 @@
 import { updateElementStyle } from '@dcloudio/uni-shared'
 import MIMEType from './MIMEType'
+import { addInteractListener } from '@dcloudio/uni-components'
 
 export type createInputOptions = Pick<
   UniApp.ChooseFileOptions,
@@ -20,6 +21,7 @@ export default function ({
   type,
   extension,
 }: createInputOptions): HTMLInputElement {
+  addInteractListener()
   const inputEl = document.createElement('input')
   inputEl.type = 'file'
 

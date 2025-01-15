@@ -15,6 +15,14 @@ export const defaultRpx2Unit = {
   unitPrecision: 5,
 }
 
+export const defaultMiniProgramRpx2Unit = {
+  unit: 'rpx',
+  unitRatio: 1,
+  unitPrecision: 1,
+}
+
+export const defaultNVueRpx2Unit = defaultMiniProgramRpx2Unit
+
 export type Rpx2UnitOptions = typeof defaultRpx2Unit
 
 export function createRpx2Unit(
@@ -27,6 +35,9 @@ export function createRpx2Unit(
     val.replace(unitRE, (m, $1) => {
       if (!$1) {
         return m
+      }
+      if (unitRatio === 1) {
+        return `${$1}${unit}`
       }
       const value = toFixed(parseFloat($1) * unitRatio, unitPrecision)
       return value === 0 ? '0' : `${value}${unit}`

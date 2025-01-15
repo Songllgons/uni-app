@@ -1,23 +1,25 @@
 import {
-  Ref,
-  ref,
-  SetupContext,
-  watch,
-  onMounted,
-  onBeforeMount,
+  type ExtractPropTypes,
+  type HTMLAttributes,
+  type Ref,
+  type SetupContext,
   computed,
-  reactive,
   nextTick,
+  onBeforeMount,
+  onMounted,
+  reactive,
+  ref,
+  watch,
 } from 'vue'
-import { extend } from '@vue/shared'
+import { extend, isFunction } from '@vue/shared'
 import { debounce } from '@dcloudio/uni-shared'
 import { getCurrentPageId, registerViewMethod } from '@dcloudio/uni-core'
 import { throttle } from './throttle'
-import { useCustomEvent, CustomEventTrigger } from './useEvent'
+import { type CustomEventTrigger, useCustomEvent } from './useEvent'
 import { useUserAction } from './useUserAction'
 import {
-  props as keyboardProps,
   emit as keyboardEmit,
+  props as keyboardProps,
   useKeyboard,
 } from './useKeyboard'
 import { useScopedAttrs } from './useScopedAttrs'
@@ -52,8 +54,15 @@ const UniViewJSBridgeSubscribe = function () {
 const FOCUS_DELAY = 200
 let startTime: number
 
-function getValueString(value: any) {
-  return value === null ? '' : String(value)
+function getValueString(value: any, type: string, maxlength?: number) {
+  if (type === 'number' && isNaN(Number(value))) {
+    value = ''
+  }
+  const valueStr = value === null || value === void 0 ? '' : String(value)
+  if (maxlength == void 0) {
+    return valueStr
+  }
+  return valueStr.slice(0, maxlength)
 }
 
 interface InputEventDetail {
@@ -61,6 +70,18 @@ interface InputEventDetail {
 }
 
 type HTMLFieldElement = HTMLInputElement | HTMLTextAreaElement
+
+type INPUT_MODE = HTMLAttributes['inputmode']
+const INPUT_MODES: INPUT_MODE[] = [
+  'none',
+  'text',
+  'decimal',
+  'numeric',
+  'tel',
+  'search',
+  'email',
+  'url',
+]
 
 export const props = /*#__PURE__*/ extend(
   {},
@@ -71,11 +92,9 @@ export const props = /*#__PURE__*/ extend(
     },
     modelValue: {
       type: [String, Number],
-      default: '',
     },
     value: {
       type: [String, Number],
-      default: '',
     },
     disabled: {
       type: [Boolean, String],
@@ -126,11 +145,32 @@ export const props = /*#__PURE__*/ extend(
     },
     maxlength: {
       type: [Number, String],
-      default: 140,
+      default: __X__ ? Infinity : 140,
     },
     confirmType: {
       type: String,
       default: 'done',
+    },
+    confirmHold: {
+      type: Boolean,
+      default: false,
+    },
+    ignoreCompositionEvent: {
+      type: Boolean,
+      default: true,
+    },
+    step: {
+      type: String,
+      default: '0.000000000000000001',
+    },
+    inputmode: {
+      type: String,
+      default: undefined,
+      validator: (value: INPUT_MODE) => !!~INPUT_MODES.indexOf(value),
+    },
+    cursorColor: {
+      type: String,
+      default: '',
     },
   },
   keyboardProps
@@ -143,15 +183,18 @@ export const emit = [
   'update:value',
   'update:modelValue',
   'update:focus',
+  'compositionstart',
+  'compositionupdate',
+  'compositionend',
   ...keyboardEmit,
 ]
 
-type Props = Record<keyof typeof props, any>
+type Props = ExtractPropTypes<typeof props>
 
-interface State {
+export interface State {
   value: string
   maxlength: number
-  focus: boolean
+  focus: boolean | string
   composing: boolean
   selectionStart: number
   selectionEnd: number
@@ -179,9 +222,38 @@ function useBase(
   })
   const maxlength = computed(() => {
     var maxlength = Number(props.maxlength)
-    return isNaN(maxlength) ? 140 : maxlength
+    if (__X__) {
+      return isNaN(maxlength) || maxlength < 0
+        ? Infinity
+        : Math.floor(maxlength)
+    } else {
+      return isNaN(maxlength) ? 140 : maxlength
+    }
   })
-  const value = getValueString(props.modelValue) || getValueString(props.value)
+  let value = ''
+  if (__X__) {
+    // case: 如果 modelValue 和 value 都存在，优先使用 modelValue
+    // case: 如果 modelValue 未设置，读取 value
+
+    const modelValueString = getValueString(
+      props.modelValue,
+      props.type,
+      maxlength.value
+    )
+    const valueString = getValueString(props.value, props.type, maxlength.value)
+
+    // prettier-ignore
+    value =
+      props.modelValue !== void 0
+        ? modelValueString !== null && modelValueString !== void 0
+          ? modelValueString
+          : valueString
+        : valueString
+  } else {
+    value =
+      getValueString(props.modelValue, props.type) ||
+      getValueString(props.value, props.type)
+  }
   const state: State = reactive({
     value,
     valueOrigin: value,
@@ -198,7 +270,10 @@ function useBase(
   )
   watch(
     () => state.maxlength,
-    (val) => (state.value = state.value.slice(0, val))
+    (val) => (state.value = state.value.slice(0, val)),
+    {
+      immediate: __X__ ? true : false,
+    }
   )
   return {
     fieldRef,
@@ -209,17 +284,31 @@ function useBase(
 
 function useValueSync(
   props: Props,
-  state: { value: string },
+  state: { value: string; maxlength: number },
   emit: SetupContext['emit'],
   trigger: CustomEventTrigger
 ) {
-  const valueChangeFn = debounce((val: any) => {
-    state.value = getValueString(val)
-  }, 100)
-  watch(() => props.modelValue, valueChangeFn)
-  watch(() => props.value, valueChangeFn)
+  let valueChangeFn:
+    | ReturnType<typeof throttle>
+    | ReturnType<typeof debounce>
+    | null = null
+  if (__X__) {
+    valueChangeFn = throttle((val: any) => {
+      state.value = getValueString(val, props.type, state.maxlength)
+    }, 100)
+  } else {
+    valueChangeFn = debounce(
+      (val: any) => {
+        state.value = getValueString(val, props.type)
+      },
+      100,
+      { setTimeout, clearTimeout }
+    )
+  }
+  watch(() => props.modelValue, valueChangeFn!)
+  watch(() => props.value, valueChangeFn!)
   const triggerInputFn = throttle((event: Event, detail: InputEventDetail) => {
-    valueChangeFn.cancel()
+    valueChangeFn!.cancel()
     emit('update:modelValue', detail.value)
     emit('update:value', detail.value)
     trigger('input', event, detail)
@@ -229,14 +318,14 @@ function useValueSync(
     detail: InputEventDetail,
     force: boolean
   ) => {
-    valueChangeFn.cancel()
+    valueChangeFn!.cancel()
     triggerInputFn(event, detail)
     if (force) {
       triggerInputFn.flush()
     }
   }
   onBeforeMount(() => {
-    valueChangeFn.cancel()
+    valueChangeFn!.cancel()
     triggerInputFn.cancel()
   })
   return {
@@ -265,10 +354,24 @@ function useAutoFocus(props: Props, fieldRef: Ref<HTMLFieldElement | null>) {
         setTimeout(focus, timeout)
         return
       }
-      field.focus()
-      // 无用户交互的 webview 需主动显示键盘（安卓）
-      if (!userActionState.userAction) {
-        plus.key.showSoftKeybord()
+      // @ts-expect-error plus类型
+      if (plus.os.name === 'HarmonyOS') {
+        // 无用户交互的 webview 需主动显示键盘（鸿蒙）
+        if (!userActionState.userAction) {
+          // 鸿蒙需要先显示键盘再focus，否则键盘类型、confirmType等设置无效
+          plus.key.showSoftKeybord()
+          setTimeout(() => {
+            field.focus()
+          }, 100)
+        } else {
+          field.focus()
+        }
+      } else {
+        field.focus()
+        // 无用户交互的 webview 需主动显示键盘（安卓）
+        if (!userActionState.userAction) {
+          plus.key.showSoftKeybord()
+        }
       }
     }
   }
@@ -300,6 +403,7 @@ function useAutoFocus(props: Props, fieldRef: Ref<HTMLFieldElement | null>) {
 function useEvent(
   fieldRef: Ref<HTMLFieldElement | null>,
   state: State,
+  props: Props,
   trigger: CustomEventTrigger,
   triggerInput: Function,
   beforeInput?: (event: Event, state: State) => any
@@ -310,7 +414,8 @@ function useEvent(
       field &&
       state.focus &&
       state.selectionStart > -1 &&
-      state.selectionEnd > -1
+      state.selectionEnd > -1 &&
+      field.type !== 'number'
     ) {
       field.selectionStart = state.selectionStart
       field.selectionEnd = state.selectionEnd
@@ -323,13 +428,22 @@ function useEvent(
       state.focus &&
       state.selectionStart < 0 &&
       state.selectionEnd < 0 &&
-      state.cursor > -1
+      state.cursor > -1 &&
+      field.type !== 'number'
     ) {
       field.selectionEnd = field.selectionStart = state.cursor
     }
   }
+  function getFieldSelectionEnd(field: HTMLInputElement) {
+    if (field.type === 'number') {
+      return null
+    } else {
+      return field.selectionEnd
+    }
+  }
   function initField() {
-    const field = fieldRef.value as HTMLFieldElement
+    const field = fieldRef.value
+    if (!field) return
     const onFocus = function (event: Event) {
       state.focus = true
       trigger('focus', event, {
@@ -341,19 +455,16 @@ function useEvent(
     }
     const onInput = function (event: Event, force?: boolean) {
       event.stopPropagation()
-      if (
-        typeof beforeInput === 'function' &&
-        beforeInput(event, state) === false
-      ) {
+      if (isFunction(beforeInput) && beforeInput(event, state) === false) {
         return
       }
       state.value = field.value
-      if (!state.composing) {
+      if (!state.composing || !props.ignoreCompositionEvent) {
         triggerInput(
           event,
           {
             value: field.value,
-            cursor: field.selectionEnd,
+            cursor: getFieldSelectionEnd(field as HTMLInputElement),
           },
           force
         )
@@ -368,7 +479,7 @@ function useEvent(
       state.focus = false
       trigger('blur', event, {
         value: state.value,
-        cursor: (event.target as HTMLFieldElement).selectionEnd,
+        cursor: getFieldSelectionEnd(event.target as HTMLInputElement),
       })
     }
     // 避免触发父组件 change 事件
@@ -379,6 +490,7 @@ function useEvent(
     field.addEventListener('compositionstart', (event) => {
       event.stopPropagation()
       state.composing = true
+      _onComposition(event)
     })
     field.addEventListener('compositionend', (event) => {
       event.stopPropagation()
@@ -387,7 +499,16 @@ function useEvent(
         // 部分输入法 compositionend 事件可能晚于 input
         onInput(event)
       }
+      _onComposition(event)
     })
+    field.addEventListener('compositionupdate', _onComposition)
+    function _onComposition(event: Event) {
+      if (!props.ignoreCompositionEvent) {
+        trigger((event as InputEvent).type, event, {
+          value: (event as InputEvent).data,
+        })
+      }
+    }
   }
   watch([() => state.selectionStart, () => state.selectionEnd], checkSelection)
   watch(() => state.cursor, checkCursor)
@@ -407,7 +528,7 @@ export function useField(
   useKeyboard(props, fieldRef, trigger)
   const { state: scopedAttrsState } = useScopedAttrs()
   useFormField('name', state)
-  useEvent(fieldRef, state, trigger, triggerInput, beforeInput)
+  useEvent(fieldRef, state, props, trigger, triggerInput, beforeInput)
 
   // Safari 14 以上修正禁用状态颜色
   // TODO fixDisabledColor 可以调整到beforeMount或mounted做修正，确保不影响SSR

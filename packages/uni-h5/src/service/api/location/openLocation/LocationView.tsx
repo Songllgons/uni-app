@@ -88,6 +88,14 @@ export default /*#__PURE__*/ defineSystemComponent({
     const state = useState(props)
     usePreventScroll()
 
+    getLocation({
+      type: 'gcj02',
+      success: ({ latitude, longitude }) => {
+        state.location.latitude = latitude
+        state.location.longitude = longitude
+      },
+    })
+
     function onRegionChange(event: { detail: { centerLocation: Point } }) {
       const centerLocation = event.detail.centerLocation
       if (centerLocation) {
@@ -106,13 +114,24 @@ export default /*#__PURE__*/ defineSystemComponent({
         url = `https://www.google.com/maps/dir/?api=1${origin}&destination=${props.latitude}%2C${props.longitude}`
       } else if (mapInfo.type === MapType.QQ) {
         const fromcoord: string = state.location.latitude
-          ? `&fromcoord=${state.location.latitude}%2C${state.location.longitude}`
+          ? `&fromcoord=${state.location.latitude}%2C${
+              state.location.longitude
+            }&from=${encodeURIComponent('我的位置')}`
           : ''
         url = `https://apis.map.qq.com/uri/v1/routeplan?type=drive${fromcoord}&tocoord=${
           props.latitude
-        }%2C${props.longitude}&from=${encodeURIComponent(
-          '我的位置'
-        )}&to=${encodeURIComponent(props.name || '目的地')}&ref=${mapInfo.key}`
+        }%2C${props.longitude}&to=${encodeURIComponent(
+          props.name || '目的地'
+        )}&ref=${mapInfo.key}`
+      } else if (mapInfo.type === MapType.AMAP) {
+        const from = state.location.latitude
+          ? `from=${state.location.longitude},${
+              state.location.latitude
+            },${encodeURIComponent('我的位置')}&`
+          : ''
+        url = `https://uri.amap.com/navigation?${from}to=${props.longitude},${
+          props.latitude
+        },${encodeURIComponent(props.name || '目的地')}`
       }
       window.open(url)
     }
@@ -121,28 +140,9 @@ export default /*#__PURE__*/ defineSystemComponent({
       emit('close')
     }
 
-    function move({ latitude, longitude }: Point) {
-      state.location.latitude = latitude
-      state.location.longitude = longitude
-      setCenter({ latitude, longitude })
-    }
-
     function setCenter({ latitude, longitude }: Point) {
       state.center.latitude = latitude
       state.center.longitude = longitude
-    }
-
-    function moveToLocation() {
-      getLocation({
-        type: 'gcj02',
-        success: move,
-        fail: () => {
-          // move({
-          //   latitude: 0,
-          //   longitude: 0,
-          // })
-        },
-      })
     }
 
     return () => {
@@ -155,7 +155,7 @@ export default /*#__PURE__*/ defineSystemComponent({
             markers={[state.marker, state.location]}
             onRegionchange={onRegionChange}
           >
-            <div class="map-move" onClick={moveToLocation}>
+            <div class="map-move" onClick={() => setCenter(state.location)}>
               {createSvgIconVNode(ICON_PATH_LOCTAION, '#000000', 24)}
             </div>
           </Map>

@@ -1,11 +1,16 @@
 import fs from 'fs-extra'
 import path from 'path'
-import { defineUniMainJsPlugin } from '@dcloudio/uni-cli-shared'
+import {
+  defineUniMainJsPlugin,
+  getPlatformDir,
+  normalizePath,
+  resolveBuiltIn,
+} from '@dcloudio/uni-cli-shared'
 
 export default [
   defineUniMainJsPlugin((opts) => {
     return {
-      name: 'vite:uni-automator',
+      name: 'uni:automator',
       enforce: 'pre',
       configResolved() {
         if (!process.env.UNI_AUTOMATOR_WS_ENDPOINT) {
@@ -21,7 +26,7 @@ export default [
         fs.outputFileSync(
           path.resolve(
             process.env.UNI_OUTPUT_DIR,
-            '../.automator/' + process.env.UNI_PLATFORM + '/.automator.json'
+            '../.automator/' + getPlatformDir() + '/.automator.json'
           ),
           automatorJson
         )
@@ -32,13 +37,52 @@ export default [
         }
         if (opts.filter(id)) {
           const platform = process.env.UNI_PLATFORM
-          return {
-            code:
-              code +
-              `;import '@dcloudio/uni-${
+          // 仅 app-android
+          if (platform === 'app' && process.env.UNI_APP_X === 'true') {
+            // app-webview，不增加 initAutomator
+            if (process.env.UNI_AUTOMATOR_APP_WEBVIEW === 'true') {
+              return null
+            }
+            if (process.env.UNI_UTS_PLATFORM === 'app-android') {
+              const automatorPath = normalizePath(
+                resolveBuiltIn(
+                  `@dcloudio/uni-app-uts/lib/automator/android/index.uts`
+                )
+              )
+              return {
+                code:
+                  // 增加个换行，避免最后是注释且无换行
+                  code + `;\nimport { initAutomator } from '${automatorPath}';`,
+                map: {
+                  mappings: '',
+                },
+              }
+            } else if (process.env.UNI_UTS_PLATFORM === 'app-ios') {
+              const automatorPath = normalizePath(
+                resolveBuiltIn(
+                  `@dcloudio/uni-app-uts/lib/automator/ios/automator.js`
+                )
+              )
+              return {
+                code: code + `;\nimport '${automatorPath}';`,
+                map: {
+                  mappings: '',
+                },
+              }
+            }
+          }
+          const automatorPath = normalizePath(
+            resolveBuiltIn(
+              `@dcloudio/uni-${
                 platform === 'app' ? 'app-plus' : platform
-              }/lib/automator.js';`,
-            map: null,
+              }/lib/automator.js`
+            )
+          )
+          return {
+            code: code + `;\nimport '${automatorPath}';`,
+            map: {
+              mappings: '',
+            },
           }
         }
       },

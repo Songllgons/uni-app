@@ -1,8 +1,17 @@
 {
   "private": true,
   "name": "@dcloudio/size-check",
-  "version": "3.0.0-alpha-3021020211012005",
+  "version": "3.0.0-alpha-4040120241205001",
   "dependencies": {
-    "vue-router": "^4.0.11"
+    "@dcloudio/uni-app": "workspace:*",
+    "@dcloudio/uni-h5": "workspace:*",
+    "vue": "3.4.21",
+    "vue-i18n": "9.1.9",
+    "vuex": "^4.1.0"
+  },
+  "devDependencies": {
+    "@dcloudio/uni-cli-shared": "workspace:*",
+    "@dcloudio/uni-components": "workspace:*",
+    "@dcloudio/vite-plugin-uni": "workspace:*"
   }
 }

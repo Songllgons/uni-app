@@ -1,10 +1,15 @@
-import { ElementNode, ErrorCodes } from '@vue/compiler-core'
+import { type ElementNode, ErrorCodes } from '@vue/compiler-core'
 import { compile } from '../src'
-import { CompilerOptions } from '../src/options'
+import type { CompilerOptions } from '../src/options'
 import { assert } from './testUtils'
 
 function parseWithVOn(template: string, options: CompilerOptions = {}) {
-  const { ast } = compile(template, options)
+  const { ast } = compile(template, {
+    generatorOpts: {
+      concise: true,
+    },
+    ...options,
+  })
   return {
     root: ast,
     node: ast.children[0] as ElementNode,
@@ -17,9 +22,14 @@ describe('compiler: transform v-on', () => {
       `<view v-on:click="onClick"/>`,
       `<view bindtap="{{a}}"/>`,
       `(_ctx, _cache) => {
-return {
-  a: _vOn(_ctx.onClick)
-}
+  return { a: _o(_ctx.onClick) }
+}`
+    )
+    assert(
+      `<custom v-on:click="onClick"/>`,
+      `<custom bindclick="{{a}}" u-i="2a9ec0b0-0"/>`,
+      `(_ctx, _cache) => {
+  return { a: _o(_ctx.onClick) }
 }`
     )
   })
@@ -37,9 +47,7 @@ return {
       `<view @click="i++"/>`,
       `<view bindtap="{{a}}"/>`,
       `(_ctx, _cache) => {
-return {
-  a: _vOn($event => _ctx.i++)
-}
+  return { a: _o($event => _ctx.i++) }
 }`
     )
   })
@@ -48,13 +56,7 @@ return {
       `<view @click="foo();bar()"/>`,
       `<view bindtap="{{a}}"/>`,
       `(_ctx, _cache) => {
-return {
-  a: _vOn($event => {
-    _ctx.foo();
-
-    _ctx.bar();
-  })
-}
+  return { a: _o($event => { _ctx.foo(); _ctx.bar(); }) }
 }`
     )
   })
@@ -63,14 +65,13 @@ return {
       `<view @click="\nfoo();\nbar()\n"/>`,
       `<view bindtap="{{a}}"/>`,
       `(_ctx, _cache) => {
-return {
-  a: _vOn($event => {
-    foo();
-    bar();
-  })
-}
+  with (_ctx) {
+    const { o: _o } = _Vue
+
+    return { a: _o($event => { foo(); bar(); }) }
+  }
 }`,
-      { prefixIdentifiers: false }
+      { prefixIdentifiers: false, mode: 'function' }
     )
   })
   test('inline statement w/ prefixIdentifiers: true', () => {
@@ -78,9 +79,7 @@ return {
       `<view @click="foo($event)"/>`,
       `<view bindtap="{{a}}"/>`,
       `(_ctx, _cache) => {
-return {
-  a: _vOn($event => _ctx.foo($event))
-}
+  return { a: _o($event => _ctx.foo($event)) }
 }`
     )
   })
@@ -89,13 +88,7 @@ return {
       `<view @click="foo($event);bar()"/>`,
       `<view bindtap="{{a}}"/>`,
       `(_ctx, _cache) => {
-return {
-  a: _vOn($event => {
-    _ctx.foo($event);
-
-    _ctx.bar();
-  })
-}
+  return { a: _o($event => { _ctx.foo($event); _ctx.bar(); }) }
 }`
     )
   })
@@ -104,9 +97,7 @@ return {
       `<view @click="$event => foo($event)"/>`,
       `<view bindtap="{{a}}"/>`,
       `(_ctx, _cache) => {
-return {
-  a: _vOn($event => _ctx.foo($event))
-}
+  return { a: _o($event => _ctx.foo($event)) }
 }`
     )
   })
@@ -119,11 +110,7 @@ return {
 "/>`,
       `<view bindtap="{{a}}"/>`,
       `(_ctx, _cache) => {
-return {
-  a: _vOn($event => {
-    _ctx.foo($event);
-  })
-}
+  return { a: _o($event => { _ctx.foo($event); }) }
 }`
     )
   })
@@ -136,11 +123,7 @@ return {
 "/>`,
       `<view bindtap="{{a}}"/>`,
       `(_ctx, _cache) => {
-return {
-  a: _vOn(function ($event) {
-    _ctx.foo($event);
-  })
-}
+  return { a: _o(function ($event) { _ctx.foo($event); }) }
 }`
     )
   })
@@ -149,12 +132,15 @@ return {
       `<view @click="a['b' + c]"/>`,
       `<view bindtap="{{a}}"/>`,
       `(_ctx, _cache) => {
-return {
-  a: _vOn(a['b' + c])
-}
+  with (_ctx) {
+    const { o: _o } = _Vue
+
+    return { a: _o(a['b' + c]) }
+  }
 }`,
       {
         prefixIdentifiers: false,
+        mode: 'function',
       }
     )
   })
@@ -163,9 +149,7 @@ return {
       `<view @click="a['b' + c]"/>`,
       `<view bindtap="{{a}}"/>`,
       `(_ctx, _cache) => {
-return {
-  a: _vOn(_ctx.a['b' + _ctx.c])
-}
+  return { a: _o(_ctx.a['b' + _ctx.c]) }
 }`
     )
   })
@@ -174,9 +158,7 @@ return {
       `<view @click="e => foo(e)"/>`,
       `<view bindtap="{{a}}"/>`,
       `(_ctx, _cache) => {
-return {
-  a: _vOn(e => _ctx.foo(e))
-}
+  return { a: _o(e => _ctx.foo(e)) }
 }`
     )
   })
@@ -208,9 +190,7 @@ return {
       `<view v-on:foo-bar="onMount"/>`,
       `<view bind:foo-bar="{{a}}"/>`,
       `(_ctx, _cache) => {
-return {
-  a: _vOn(_ctx.onMount)
-}
+  return { a: _o(_ctx.onMount) }
 }`
     )
   })
@@ -220,9 +200,7 @@ return {
       `<view v-on:vnode-mounted="onMount"/>`,
       `<view bind:vnode-mounted="{{a}}"/>`,
       `(_ctx, _cache) => {
-return {
-  a: _vOn(_ctx.onMount)
-}
+  return { a: _o(_ctx.onMount) }
 }`
     )
   })
@@ -233,9 +211,7 @@ return {
         `<view v-on:click.prevent />`,
         `<view catchtap="{{a}}"/>`,
         `(_ctx, _cache) => {
-return {
-  a: _vOn(() => {})
-}
+  return { a: _o(() => {}) }
 }`
       )
     })

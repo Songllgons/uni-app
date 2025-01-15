@@ -9,7 +9,7 @@ const uni_cli_shared_1 = require("@dcloudio/uni-cli-shared");
 exports.default = [
     (0, uni_cli_shared_1.defineUniMainJsPlugin)((opts) => {
         return {
-            name: 'vite:uni-automator',
+            name: 'uni:automator',
             enforce: 'pre',
             configResolved() {
                 if (!process.env.UNI_AUTOMATOR_WS_ENDPOINT) {
@@ -20,7 +20,7 @@ exports.default = [
                     version: pkg.version,
                     wsEndpoint: process.env.UNI_AUTOMATOR_WS_ENDPOINT,
                 });
-                fs_extra_1.default.outputFileSync(path_1.default.resolve(process.env.UNI_OUTPUT_DIR, '../.automator/' + process.env.UNI_PLATFORM + '/.automator.json'), automatorJson);
+                fs_extra_1.default.outputFileSync(path_1.default.resolve(process.env.UNI_OUTPUT_DIR, '../.automator/' + (0, uni_cli_shared_1.getPlatformDir)() + '/.automator.json'), automatorJson);
             },
             transform(code, id) {
                 if (!process.env.UNI_AUTOMATOR_WS_ENDPOINT) {
@@ -28,10 +28,39 @@ exports.default = [
                 }
                 if (opts.filter(id)) {
                     const platform = process.env.UNI_PLATFORM;
+                    // 仅 app-android
+                    if (platform === 'app' && process.env.UNI_APP_X === 'true') {
+                        // app-webview，不增加 initAutomator
+                        if (process.env.UNI_AUTOMATOR_APP_WEBVIEW === 'true') {
+                            return null;
+                        }
+                        if (process.env.UNI_UTS_PLATFORM === 'app-android') {
+                            const automatorPath = (0, uni_cli_shared_1.normalizePath)((0, uni_cli_shared_1.resolveBuiltIn)(`@dcloudio/uni-app-uts/lib/automator/android/index.uts`));
+                            return {
+                                code: 
+                                // 增加个换行，避免最后是注释且无换行
+                                code + `;\nimport { initAutomator } from '${automatorPath}';`,
+                                map: {
+                                    mappings: '',
+                                },
+                            };
+                        }
+                        else if (process.env.UNI_UTS_PLATFORM === 'app-ios') {
+                            const automatorPath = (0, uni_cli_shared_1.normalizePath)((0, uni_cli_shared_1.resolveBuiltIn)(`@dcloudio/uni-app-uts/lib/automator/ios/automator.js`));
+                            return {
+                                code: code + `;\nimport '${automatorPath}';`,
+                                map: {
+                                    mappings: '',
+                                },
+                            };
+                        }
+                    }
+                    const automatorPath = (0, uni_cli_shared_1.normalizePath)((0, uni_cli_shared_1.resolveBuiltIn)(`@dcloudio/uni-${platform === 'app' ? 'app-plus' : platform}/lib/automator.js`));
                     return {
-                        code: code +
-                            `;import '@dcloudio/uni-${platform === 'app' ? 'app-plus' : platform}/lib/automator.js';`,
-                        map: null,
+                        code: code + `;\nimport '${automatorPath}';`,
+                        map: {
+                            mappings: '',
+                        },
                     };
                 }
             },

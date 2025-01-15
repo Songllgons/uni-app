@@ -2,15 +2,20 @@ import { elemInArray } from '../../helpers/protocol'
 
 export const API_SHREA = 'share'
 export type API_TYPE_SHARE = typeof uni.share
-const SCENE: Parameters<API_TYPE_SHARE>[0]['scene'][] = [
+const SCENE: NonNullable<Parameters<API_TYPE_SHARE>[0]>['scene'][] = [
   'WXSceneSession',
-  'WXSenceTimeline',
+  'WXSceneTimeline',
   'WXSceneFavorite',
 ]
 export const SahreOptions: ApiOptions<API_TYPE_SHARE> = {
   formatArgs: {
     scene(value, params) {
-      if (params.provider === 'weixin' && (!value || !SCENE.includes(value))) {
+      const { provider, openCustomerServiceChat } = params
+      if (
+        provider === 'weixin' &&
+        !openCustomerServiceChat &&
+        (!value || !SCENE.includes(value))
+      ) {
         return `分享到微信时，scene必须为以下其中一个：${SCENE.join('、')}`
       }
     },
@@ -39,6 +44,16 @@ export const SahreOptions: ApiOptions<API_TYPE_SHARE> = {
         return '分享小程序时，miniProgram必填'
       }
     },
+    corpid(value, params) {
+      if (params.openCustomerServiceChat && !value) {
+        return `使用打开客服功能时 corpid 必填`
+      }
+    },
+    customerUrl(value, params) {
+      if (params.openCustomerServiceChat && !value) {
+        return `使用打开客服功能时 customerUrl 必填`
+      }
+    },
   },
 }
 export const ShareProtocols: ApiProtocol<API_TYPE_SHARE> = {
@@ -58,7 +73,7 @@ export const ShareProtocols: ApiProtocol<API_TYPE_SHARE> = {
 
 export const API_SHARE_WITH_SYSTEM = 'shareWithSystem'
 export type API_TYPE_SHARE_WITH_SYSTEM = typeof uni.shareWithSystem
-const TYPE: Parameters<API_TYPE_SHARE_WITH_SYSTEM>[0]['type'][] = [
+const TYPE: NonNullable<Parameters<API_TYPE_SHARE_WITH_SYSTEM>[0]>['type'][] = [
   'text',
   'image',
 ]

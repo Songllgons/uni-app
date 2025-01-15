@@ -1,3 +1,4 @@
+import { isFunction } from '@vue/shared'
 import { getRealPath } from '@dcloudio/uni-platform'
 import {
   API_CREATE_INNER_AUDIO_CONTEXT,
@@ -6,7 +7,7 @@ import {
 import type { API_TYPE_CREATEE_INNER_AUDIO_CONTEXT } from '@dcloudio/uni-api'
 import { once } from '@dcloudio/uni-shared'
 import {
-  InnerAudioContextEvent,
+  type InnerAudioContextEvent,
   innerAudioContextEventNames,
   innerAudioContextOffEventNames,
 } from '@dcloudio/uni-api'
@@ -28,7 +29,7 @@ const initInnerAudioContextEventOnce = /*#__PURE__*/ once(() => {
   // 批量设置音频上下文事件监听方法
   innerAudioContextEventNames.forEach((eventName) => {
     InnerAudioContext.prototype[eventName] = function (callback: Function) {
-      if (typeof callback === 'function') {
+      if (isFunction(callback)) {
         this._events[eventName]!.push(callback)
       }
     }
@@ -189,8 +190,8 @@ class InnerAudioContext implements UniApp.InnerAudioContext {
             return
           }
           const EventName = `on${eventName
-            .substr(0, 1)
-            .toUpperCase()}${eventName.substr(1)}` as InnerAudioContextEvent
+            .slice(0, 1)
+            .toUpperCase()}${eventName.slice(1)}` as InnerAudioContextEvent
           this._events[EventName]!.forEach((callback) => {
             callback()
           })

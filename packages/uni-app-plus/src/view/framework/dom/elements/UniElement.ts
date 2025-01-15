@@ -1,28 +1,29 @@
 import { hasOwn } from '@vue/shared'
 import {
   ATTR_CLASS,
-  ATTR_STYLE,
   ATTR_INNER_HTML,
+  ATTR_STYLE,
   ATTR_TEXT_CONTENT,
-  ATTR_V_SHOW,
   ATTR_V_OWNER_ID,
   ATTR_V_RENDERJS,
-  UniNodeJSON,
+  ATTR_V_SHOW,
+  type UniNodeJSON,
 } from '@dcloudio/uni-shared'
 import { reactive, watch } from 'vue'
 import { UniNode } from './UniNode'
 import { patchClass } from '../modules/class'
 import { patchStyle } from '../modules/style'
 import { patchEvent, patchWxsEvent } from '../modules/events'
-import { UniCustomElement } from '../components'
+import type { UniCustomElement } from '../components'
 import {
   JOB_PRIORITY_RENDERJS,
   JOB_PRIORITY_UPDATE,
   queuePostActionJob,
 } from '../scheduler'
-import { decodeAttr } from '../utils'
-import { patchVShow, VShowElement } from '../directives/vShow'
+import { decodeAttr, isCssVar } from '../utils'
+import { type VShowElement, patchVShow } from '../directives/vShow'
 import { initRenderjs } from '../renderjs'
+import { normalizeStyleValue } from '../../../utils'
 
 export class UniElement<T extends object> extends UniNode {
   declare $: UniCustomElement
@@ -45,7 +46,7 @@ export class UniElement<T extends object> extends UniNode {
     this.init(nodeJson)
     this.insert(parentNodeId, refNodeId)
   }
-  init(nodeJson: Partial<UniNodeJSON>) {
+  init(nodeJson: Partial<UniNodeJSON>, isCreate: boolean = true) {
     if (hasOwn(nodeJson, 'a')) {
       this.setAttrs(nodeJson.a!)
     }
@@ -59,14 +60,17 @@ export class UniElement<T extends object> extends UniNode {
       this.addWxsEvents(nodeJson.w!)
     }
     super.init(nodeJson)
-    watch(
-      this.$props,
-      () => {
-        queuePostActionJob(this._update!, JOB_PRIORITY_UPDATE)
-      },
-      { flush: 'sync' }
-    )
-    this.update(true)
+    // insert 的时候可能也会调用该 init
+    if (isCreate) {
+      watch(
+        this.$props,
+        () => {
+          queuePostActionJob(this._update!, JOB_PRIORITY_UPDATE)
+        },
+        { flush: 'sync' }
+      )
+      this.update(true)
+    }
   }
   setAttrs(attrs: Record<string, any>) {
     // 初始化时，先提取 wxsProps，再 setAttr
@@ -117,6 +121,7 @@ export class UniElement<T extends object> extends UniNode {
     else {
       this.setAttribute(name, value as string)
     }
+    this.updateView()
   }
   removeAttr(name: string) {
     if (name === ATTR_CLASS) {
@@ -126,11 +131,14 @@ export class UniElement<T extends object> extends UniNode {
     } else {
       this.removeAttribute(name)
     }
+    this.updateView()
   }
   setAttribute(name: string, value: unknown) {
-    value = decodeAttr(this.$, value)
+    value = decodeAttr(value, this.$)
     if (this.$propNames.indexOf(name) !== -1) {
       ;(this.$props as any)[name] = value
+    } else if (isCssVar(name)) {
+      this.$.style.setProperty(name, normalizeStyleValue(value as string))
     } else {
       if (!this.wxsPropsInvoke(name, value)) {
         this.$.setAttribute(name, value as string)
@@ -140,6 +148,8 @@ export class UniElement<T extends object> extends UniNode {
   removeAttribute(name: string) {
     if (this.$propNames.indexOf(name) !== -1) {
       delete (this.$props as any)[name]
+    } else if (isCssVar(name)) {
+      this.$.style.removeProperty(name)
     } else {
       this.$.removeAttribute(name)
     }

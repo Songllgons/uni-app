@@ -1,10 +1,16 @@
-import { MagicString } from '@vue/compiler-sfc'
+import MagicString from 'magic-string'
+import type { TransformResult } from 'vite'
 import { normalizePath } from '../utils'
 
-const F = '__f__'
-export function rewriteConsoleExpr(filename: string, code: string) {
+export function rewriteConsoleExpr(
+  method: string,
+  id: string,
+  filename: string,
+  code: string,
+  sourceMap: boolean = false
+): TransformResult {
   filename = normalizePath(filename)
-  const re = /(console\.(log|info|debug|warn|error))\(([^)]+)\)/g
+  const re = /(console\.(log|info|debug|warn|error))\s*\(([^)]+)\)/g
   const locate = getLocator(code)
   const s = new MagicString(code)
   let match: RegExpExecArray | null
@@ -13,10 +19,23 @@ export function rewriteConsoleExpr(filename: string, code: string) {
     s.overwrite(
       match.index,
       match.index + expr.length + 1,
-      F + `('${type}','at ${filename}:${locate(match.index).line + 1}',`
+      method + `('${type}','at ${filename}:${locate(match.index).line + 1}',`
     )
   }
-  return s.toString()
+  if (s.hasChanged()) {
+    return {
+      code: s.toString(),
+      map: sourceMap ? s.generateMap({ hires: true }) : { mappings: '' },
+    }
+  }
+  return { code, map: { mappings: '' } }
+}
+
+export function restoreConsoleExpr(code: string): string {
+  return code.replace(
+    /(?:uni\.)?__f__\('([^']+)','at ([^:]+):(\d+)',/g,
+    'console.$1('
+  )
 }
 
 function getLocator(source: string) {

@@ -1,11 +1,15 @@
+import { addLeadingSlash, removeLeadingSlash } from '@dcloudio/uni-shared'
+import { get$pageByPage } from './util'
+
 export function normalizeRoute(toRoute: string) {
-  if (toRoute.indexOf('/') === 0) {
+  // 支持 uni:showActionSheet 这种内置页面形式
+  if (toRoute.indexOf('/') === 0 || toRoute.indexOf('uni:') === 0) {
     return toRoute
   }
   let fromRoute = ''
   const pages = getCurrentPages()
   if (pages.length) {
-    fromRoute = (pages[pages.length - 1] as any).$page.route
+    fromRoute = get$pageByPage(pages[pages.length - 1]).route
   }
   return getRealRoute(fromRoute, toRoute)
 }
@@ -15,7 +19,7 @@ export function getRealRoute(fromRoute: string, toRoute: string): string {
     return toRoute
   }
   if (toRoute.indexOf('./') === 0) {
-    return getRealRoute(fromRoute, toRoute.substr(2))
+    return getRealRoute(fromRoute, toRoute.slice(2))
   }
   const toRouteArray = toRoute.split('/')
   const toRouteLength = toRouteArray.length
@@ -27,7 +31,7 @@ export function getRealRoute(fromRoute: string, toRoute: string): string {
   toRoute = toRouteArray.join('/')
   const fromRouteArray = fromRoute.length > 0 ? fromRoute.split('/') : []
   fromRouteArray.splice(fromRouteArray.length - i - 1, i + 1)
-  return '/' + fromRouteArray.concat(toRouteArray).join('/')
+  return addLeadingSlash(fromRouteArray.concat(toRouteArray).join('/'))
 }
 
 export function getRouteOptions(path: string, alias: boolean = false) {
@@ -43,5 +47,28 @@ export function getRouteMeta(path: string) {
   const routeOptions = getRouteOptions(path)
   if (routeOptions) {
     return routeOptions.meta
+  }
+}
+
+export function normalizeTabBarRoute(
+  index: number,
+  oldPagePath: string,
+  newPagePath: string
+) {
+  const oldTabBarRoute = getRouteOptions(addLeadingSlash(oldPagePath))
+  if (oldTabBarRoute) {
+    const { meta } = oldTabBarRoute
+    delete meta.tabBarIndex
+    meta.isQuit = meta.isTabBar = false
+  }
+  const newTabBarRoute = getRouteOptions(addLeadingSlash(newPagePath))
+  if (newTabBarRoute) {
+    const { meta } = newTabBarRoute
+    meta.tabBarIndex = index
+    meta.isQuit = meta.isTabBar = true
+    const tabBar = __uniConfig.tabBar
+    if (tabBar && tabBar.list && tabBar.list[index]) {
+      tabBar.list[index].pagePath = removeLeadingSlash(newPagePath)
+    }
   }
 }

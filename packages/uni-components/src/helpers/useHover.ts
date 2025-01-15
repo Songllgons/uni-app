@@ -1,4 +1,5 @@
 import { ref } from 'vue'
+import { withWebEvent } from './useEvent'
 
 interface UseHoverOptions {
   disabled?: string | boolean
@@ -30,8 +31,8 @@ export const hoverProps = {
 export function useHover(props: UseHoverOptions) {
   const hovering = ref(false)
   let hoverTouch: boolean = false
-  let hoverStartTimer: number
-  let hoverStayTimer: number
+  let hoverStartTimer: ReturnType<typeof setTimeout>
+  let hoverStayTimer: ReturnType<typeof setTimeout>
   function hoverReset() {
     requestAnimationFrame(() => {
       clearTimeout(hoverStayTimer)
@@ -40,15 +41,29 @@ export function useHover(props: UseHoverOptions) {
       }, parseInt(props.hoverStayTime as string))
     })
   }
+
   function onTouchstartPassive(evt: TouchEvent) {
+    if (evt.touches.length > 1) {
+      return
+    }
+    handleHoverStart(evt)
+  }
+
+  function onMousedown(evt: MouseEvent) {
+    if (hoverTouch) {
+      return
+    }
+
+    handleHoverStart(evt)
+    window.addEventListener('mouseup', handlePCHoverEnd)
+  }
+
+  function handleHoverStart(evt: TouchEvent | MouseEvent) {
     // TODO detect scrolling
     if ((evt as any)._hoverPropagationStopped) {
       return
     }
     if (!props.hoverClass || props.hoverClass === 'none' || props.disabled) {
-      return
-    }
-    if (evt.touches.length > 1) {
       return
     }
     if (props.hoverStopPropagation) {
@@ -63,12 +78,31 @@ export function useHover(props: UseHoverOptions) {
       }
     }, parseInt(props.hoverStartTime as string))
   }
+
   function onTouchend() {
+    handleHoverEnd()
+  }
+
+  function onMouseup() {
+    if (!hoverTouch) {
+      return
+    }
+
+    handlePCHoverEnd()
+  }
+
+  function handleHoverEnd() {
     hoverTouch = false
     if (hovering.value) {
       hoverReset()
     }
   }
+
+  function handlePCHoverEnd() {
+    handleHoverEnd()
+    window.removeEventListener('mouseup', handlePCHoverEnd)
+  }
+
   function onTouchcancel() {
     hoverTouch = false
     hovering.value = false
@@ -77,9 +111,11 @@ export function useHover(props: UseHoverOptions) {
   return {
     hovering,
     binding: {
-      onTouchstartPassive,
-      onTouchend,
-      onTouchcancel,
+      onTouchstartPassive: withWebEvent(onTouchstartPassive),
+      onMousedown: withWebEvent(onMousedown),
+      onTouchend: withWebEvent(onTouchend),
+      onMouseup: withWebEvent(onMouseup),
+      onTouchcancel: withWebEvent(onTouchcancel),
     },
   }
 }

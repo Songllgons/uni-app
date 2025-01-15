@@ -1,14 +1,14 @@
-import { Plugin } from 'vite'
+import type { Plugin } from 'vite'
 import { parse } from 'jsonc-parser'
-import { preJs, isUniAppLocaleFile } from '@dcloudio/uni-cli-shared'
-import { VitePluginUniResolvedOptions } from '../..'
+import { isUniAppLocaleFile, preJs } from '@dcloudio/uni-cli-shared'
+import type { VitePluginUniResolvedOptions } from '../..'
 
 const jsonExtRE = /\.json($|\?)(?!commonjs-proxy)/
 const SPECIAL_QUERY_RE = /[\?&](?:worker|sharedworker|raw|url)\b/
 
 export function uniJsonPlugin(options: VitePluginUniResolvedOptions): Plugin {
   return {
-    name: 'vite:uni-json',
+    name: 'uni:json',
     transform(code, id) {
       if (!jsonExtRE.test(id)) return null
       if (SPECIAL_QUERY_RE.test(id)) return null
@@ -23,7 +23,9 @@ export function uniJsonPlugin(options: VitePluginUniResolvedOptions): Plugin {
       }
       return {
         code: JSON.stringify(jsonObj),
-        map: null,
+        map: {
+          mappings: '',
+        },
       }
     },
   }

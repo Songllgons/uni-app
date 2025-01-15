@@ -1,7 +1,13 @@
 export * from './storage/storage'
 export * from './file/getFileInfo'
-export * from './file/openDocument'
 export * from './file/saveFile'
+export * from './file/getSavedFileList'
+export * from './file/getSavedFileInfo'
+export * from './file/removeSavedFile'
+export * from './file/getFileInfo'
+export * from './file/openDocument'
+
+export * from './base/canIUse'
 
 export * from './device/systemInfo'
 export * from './device/compass'
@@ -17,6 +23,10 @@ export * from './device/soterAuthentication'
 export * from './device/scanCode'
 export * from './device/theme'
 export * from './device/brightness'
+export * from './device/getWindowInfo'
+export * from './device/getSystemSetting'
+export * from './device/getAppAuthorizeSetting'
+export * from './device/openAppAuthorizeSetting'
 
 export * from './media/getImageInfo'
 export * from './media/getVideoInfo'
@@ -43,6 +53,7 @@ export * from './context/createLivePusherContext'
 export * from './location/getLocation'
 export * from './location/chooseLocation'
 export * from './location/openLocation'
+export * from './location/locationChange'
 
 export * from './ui/popup/showModal'
 export * from './ui/popup/showActionSheet'
@@ -55,14 +66,34 @@ export * from './ui/navigationBar'
 export * from './ui/tabBar'
 export * from './ui/subNVue'
 
+export * from './internal/global'
+
 export * from './plugin/getProvider'
 export * from './plugin/oauth'
+export * from './plugin/push'
 export * from './plugin/registerRuntime'
 export * from './plugin/share'
 export * from './plugin/requestPayment'
 export * from './plugin/requireNativePlugin'
-export * from './plugin/vuePlugin'
-export * from './plugin/restoreGlobal'
+export {
+  sendHostEvent,
+  navigateToMiniProgram,
+  onHostEventReceive,
+  onNativeEventReceive,
+} from './plugin/sdk'
+// 内部使用
+export { __log__ } from './plugin/log'
+// 内部使用
+export {
+  initUTSProxyClass,
+  initUTSProxyFunction,
+  initUTSIndexClassName,
+  initUTSClassName,
+  initUTSPackageName,
+  requireUTSPlugin,
+  registerUTSPlugin,
+  registerUTSInterface,
+} from './plugin/uts'
 
 export * from './ad/rewardedVideoAd'
 export * from './ad/fullScreenVideoAd'
@@ -72,7 +103,7 @@ export * from './ad/interactiveAd'
 export * from './route/navigateBack'
 export { navigateTo } from './route/navigateTo'
 export * from './route/redirectTo'
-export * from './route/reLaunch'
+export { reLaunch } from './route/reLaunch'
 export { switchTab } from './route/switchTab'
 export * from './route/preloadPage'
 
@@ -103,6 +134,24 @@ export {
   $off,
   $once,
   $emit,
-  onAppLaunch,
+  onCreateVueApp,
   onLocaleChange,
+  setPageMeta,
+  getEnterOptionsSync,
+  getLaunchOptionsSync,
+  getPushClientId,
+  onPushMessage,
+  offPushMessage,
+  onAppHide,
+  onAppShow,
+  onError,
+  onPageNotFound,
+  onUnhandledRejection,
+  offAppHide,
+  offAppShow,
+  offError,
+  offPageNotFound,
+  offUnhandledRejection,
+  // 内部使用
+  invokePushCallback,
 } from '@dcloudio/uni-api'

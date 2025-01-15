@@ -12,7 +12,9 @@ import {
   Ref,
   ExtractPropTypes,
   onMounted,
+  StyleValue,
 } from 'vue'
+import { isArray } from '@vue/shared'
 import {
   useBooleanAttr,
   useCustomEvent,
@@ -24,6 +26,7 @@ import {
   defineBuiltInComponent,
   CustomEventTrigger,
   EmitEvent,
+  UniElement,
 } from '@dcloudio/uni-components'
 import { formatDateTime } from '@dcloudio/uni-shared'
 import { usePopupStyle } from '../../../helpers/usePopupStyle'
@@ -40,7 +43,7 @@ function getDefaultStartValue(props: Props) {
     return '00:00'
   }
   if (props.mode === mode.DATE) {
-    const year = new Date().getFullYear() - 100
+    const year = new Date().getFullYear() - 150
     switch (props.fields) {
       case fields.YEAR:
         return year.toString()
@@ -57,7 +60,7 @@ function getDefaultEndValue(props: Props) {
     return '23:59'
   }
   if (props.mode === mode.DATE) {
-    const year = new Date().getFullYear() + 100
+    const year = new Date().getFullYear() + 150
     switch (props.fields) {
       case fields.YEAR:
         return year.toString()
@@ -94,7 +97,7 @@ function getDateValueArray(
     }
   }
   const inputArray = String(valueStr).split(splitStr)
-  let value = []
+  let value: number[] = []
   for (let i = 0; i < max; i++) {
     const val = inputArray[i]
     value.push(array[i].indexOf(val))
@@ -198,11 +201,12 @@ type State = {
   oldValueArray: number[]
   isDesktop: boolean
   popupStyle: {
-    content: Data
-    triangle: Data
+    content: StyleValue
+    triangle: StyleValue
   }
 }
 
+export class UniPickerElement extends UniElement {}
 export default /*#__PURE__*/ defineBuiltInComponent({
   name: 'Picker',
   compatConfig: {
@@ -210,6 +214,12 @@ export default /*#__PURE__*/ defineBuiltInComponent({
   },
   props,
   emits: ['change', 'cancel', 'columnchange'],
+  //#if _X_ && !_NODE_JS_
+  rootElement: {
+    name: 'uni-picker',
+    class: UniPickerElement,
+  },
+  //#endif
   setup(props, { emit, slots }) {
     initI18nPickerMsgsOnce()
     const { t } = useI18n()
@@ -256,7 +266,7 @@ export default /*#__PURE__*/ defineBuiltInComponent({
     _createDate()
     _setValueSync()
 
-    const popup = usePopupStyle(props)
+    const popup = usePopupStyle(state)
     watchEffect(() => {
       state.isDesktop = popup.isDesktop.value
       state.popupStyle = popup.popupStyle.value
@@ -269,6 +279,21 @@ export default /*#__PURE__*/ defineBuiltInComponent({
     onMounted(() => {
       pickerRender.value = true
     })
+
+    //#if _X_ && !_NODE_JS_
+    onMounted(() => {
+      const rootElement = rootRef.value as UniPickerElement
+      // TODO
+      // Object.defineProperty(rootElement, 'value', {
+      //   get() {
+
+      //   },
+      //   set(val) {
+      //   },
+      // })
+      rootElement.attachVmProps(props)
+    })
+    //#endif
 
     return () => {
       const { visible, contentVisible, valueArray, popupStyle, valueSync } =
@@ -485,7 +510,7 @@ function useSystem() {
   return _system
 }
 
-let __contentVisibleDelay: number
+let __contentVisibleDelay: ReturnType<typeof setTimeout>
 function usePickerMethods(
   props: Props,
   state: State,
@@ -582,10 +607,33 @@ function usePickerMethods(
     }
     ;(state.timeArray as TwoDimensionArray).push(hours, minutes)
   }
+  function getYearStartEnd() {
+    let year = new Date().getFullYear()
+    let start = year - 150
+    let end = year + 150
+    if (props.start) {
+      const _year = new Date(props.start).getFullYear()
+      if (!isNaN(_year) && _year < start) {
+        start = _year
+      }
+    }
+    if (props.end) {
+      const _year = new Date(props.end).getFullYear()
+      if (!isNaN(_year) && _year > end) {
+        end = _year
+      }
+    }
+
+    return {
+      start,
+      end,
+    }
+  }
   function _createDate() {
     let years: string[] = []
-    let year = new Date().getFullYear()
-    for (let i = year - 150, end = year + 150; i <= end; i++) {
+
+    const year = getYearStartEnd()
+    for (let i = year.start, end = year.end; i <= end; i++) {
       years.push(String(i))
     }
     let months: string[] = []
@@ -618,10 +666,10 @@ function usePickerMethods(
     switch (props.mode) {
       case mode.MULTISELECTOR:
         {
-          if (!Array.isArray(val)) {
-            val = []
+          if (!isArray(val)) {
+            val = state.valueArray
           }
-          if (!Array.isArray(state.valueSync)) {
+          if (!isArray(state.valueSync)) {
             state.valueSync = []
           }
           const length = (state.valueSync.length = Math.max(
@@ -709,7 +757,7 @@ function usePickerMethods(
     _close()
     state.valueChangeSource = 'click'
     const value = _getValue()
-    state.valueSync = Array.isArray(value) ? value.map((val) => val) : value
+    state.valueSync = isArray(value) ? value.map((val) => val) : value
     trigger('change', {} as Event, {
       value,
     })

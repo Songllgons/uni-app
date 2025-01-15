@@ -1,7 +1,7 @@
-import { ComponentPublicInstance } from 'vue'
+import type { ComponentPublicInstance } from 'vue'
 import { extend } from '@vue/shared'
 import { formatLog } from '@dcloudio/uni-shared'
-import { initAppVm, initService } from '@dcloudio/uni-core'
+import { defineGlobalData, initAppVm, initService } from '@dcloudio/uni-core'
 
 import { initEntry } from './initEntry'
 import { initTabBar } from './initTabBar'
@@ -10,6 +10,7 @@ import { initAppLaunch } from './initAppLaunch'
 import { clearTempFile } from './clearTempFile'
 import { initSubscribeHandlers } from './subscriber'
 import { initVueApp } from './vueApp'
+import { initKeyboardEvent } from '../dom/keyboard'
 
 let appCtx: ComponentPublicInstance
 const defaultApp = {
@@ -35,6 +36,17 @@ export function registerApp(appVm: ComponentPublicInstance) {
     console.log(formatLog('registerApp'))
   }
 
+  // 定制 useStore （主要是为了 nvue 共享）
+  if ((uni as any).Vuex && (appVm as any).$store) {
+    const { useStore } = (uni as any).Vuex
+    ;(uni as any).Vuex.useStore = (key: string) => {
+      if (!key) {
+        return (appVm as any).$store
+      }
+      return useStore(key)
+    }
+  }
+
   initVueApp(appVm)
 
   appCtx = appVm
@@ -42,16 +54,14 @@ export function registerApp(appVm: ComponentPublicInstance) {
 
   extend(appCtx, defaultApp) // 拷贝默认实现
 
-  const { $options } = appVm
-  if ($options) {
-    appCtx.globalData = extend($options.globalData || {}, appCtx.globalData)
-  }
+  defineGlobalData(appCtx, defaultApp.globalData)
 
   initService()
 
   initEntry()
   initTabBar()
   initGlobalEvent()
+  initKeyboardEvent()
   initSubscribeHandlers()
 
   initAppLaunch(appVm)

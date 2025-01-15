@@ -1,5 +1,5 @@
-import { UserConfig } from 'vite'
-import { VitePluginUniResolvedOptions } from '..'
+import type { UserConfig } from 'vite'
+import type { VitePluginUniResolvedOptions } from '..'
 
 export function createOptimizeDeps(
   _options: VitePluginUniResolvedOptions
@@ -14,6 +14,8 @@ export function createOptimizeDeps(
       '@dcloudio/uni-components',
       '@dcloudio/uni-i18n',
       '@dcloudio/uni-shared',
+      '@dcloudio/uni-stacktracey',
+      'pinia',
     ],
   }
 }

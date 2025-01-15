@@ -1,9 +1,8 @@
-import { isFunction, isPromise } from '@vue/shared'
-import { once, PageNodeOptions } from '@dcloudio/uni-shared'
-import { DefineComponent } from 'vue'
+import { extend, isFunction, isPromise } from '@vue/shared'
+import { type PageNodeOptions, once } from '@dcloudio/uni-shared'
+import type { DefineComponent } from 'vue'
 import { createPageNode } from '../dom/Page'
 import { setupPage } from './setup'
-import __vuePlugin from '../plugin'
 import { getVueApp } from '../app/vueApp'
 
 export type VuePageComponent = DefineComponent<PageProps>
@@ -16,7 +15,7 @@ function isVuePageAsyncComponent(
   return isFunction(component)
 }
 
-const pagesMap = new Map<string, ReturnType<typeof createFactory>>()
+export const pagesMap = new Map<string, ReturnType<typeof createFactory>>()
 
 export function definePage(
   pagePath: string,
@@ -32,7 +31,7 @@ interface PageProps {
   __pageInstance: Page.PageInstance['$page']
 }
 
-export function createPage(
+export function createVuePage(
   __pageId: number,
   __pagePath: string,
   __pageQuery: Record<string, any>,
@@ -45,12 +44,15 @@ export function createPage(
   const mountPage = (component: VuePageComponent) =>
     app.mountPage(
       component,
-      {
-        __pageId,
-        __pagePath,
-        __pageQuery,
-        __pageInstance,
-      },
+      extend(
+        {
+          __pageId,
+          __pagePath,
+          __pageQuery,
+          __pageInstance,
+        },
+        __pageQuery
+      ),
       pageNode
     )
   if (isPromise(component)) {

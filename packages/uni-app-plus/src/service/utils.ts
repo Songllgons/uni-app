@@ -1,8 +1,10 @@
 import { getCurrentPage } from '@dcloudio/uni-core'
-import { ComponentPublicInstance } from 'vue'
+import type { ComponentPublicInstance } from 'vue'
 
 export function getCurrentWebview() {
-  const page = getCurrentPage()
+  const page = __X__
+    ? (getCurrentPage() as unknown as UniPage).vm
+    : getCurrentPage()
   if (page) {
     return (page as ComponentPublicInstance).$getAppWebview!()
   }
@@ -26,33 +28,4 @@ export function setPullDownRefreshWebview(
   webview: PlusWebviewWebviewObject | null
 ) {
   pullDownRefreshWebview = webview
-}
-
-export function isTabBarPage(path = '') {
-  if (!(__uniConfig.tabBar && Array.isArray(__uniConfig.tabBar.list))) {
-    return false
-  }
-  try {
-    if (!path) {
-      const pages = getCurrentPages()
-      if (!pages.length) {
-        return false
-      }
-      const page = pages[pages.length - 1]
-      if (!page) {
-        return false
-      }
-      return page.$page.meta.isTabBar
-    }
-    if (!/^\//.test(path)) {
-      path = '/' + path
-    }
-    const route = __uniRoutes.find((route) => route.path === path)
-    return route && route.meta.isTabBar
-  } catch (e) {
-    if (process.env.NODE_ENV !== 'production') {
-      console.log('getCurrentPages is not ready')
-    }
-  }
-  return false
 }

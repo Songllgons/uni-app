@@ -1,20 +1,20 @@
-import { ComponentPublicInstance } from 'vue'
+import type { ComponentPublicInstance } from 'vue'
 import {
-  defineAsyncApi,
+  API_HIDE_NAVIGATION_BAR_LOADING,
   API_SET_NAVIGATION_BAR_COLOR,
   API_SET_NAVIGATION_BAR_TITLE,
   API_SHOW_NAVIGATION_BAR_LOADING,
-  API_HIDE_NAVIGATION_BAR_LOADING,
-  API_TYPE_SET_NAVIGATION_BAR_COLOR,
-  API_TYPE_SET_NAVIGATION_BAR_TITLE,
-  API_TYPE_SHOW_NAVIGATION_BAR_LOADING,
-  API_TYPE_HIDE_NAVIGATION_BAR_LOADING,
+  type API_TYPE_HIDE_NAVIGATION_BAR_LOADING,
+  type API_TYPE_SET_NAVIGATION_BAR_COLOR,
+  type API_TYPE_SET_NAVIGATION_BAR_TITLE,
+  type API_TYPE_SHOW_NAVIGATION_BAR_LOADING,
   SetNavigationBarColorOptions,
   SetNavigationBarColorProtocol,
   SetNavigationBarTitleProtocol,
+  defineAsyncApi,
 } from '@dcloudio/uni-api'
 import { getWebview } from '../../../service/utils'
-import { StatusBarStyle } from '../../statusBar'
+import type { StatusBarStyle } from '../../statusBar'
 
 interface SetNavigationBarTitleOptions
   extends UniApp.SetNavigationBarTitleOptions {
@@ -66,7 +66,7 @@ export const hideNavigationBarLoading =
     }
   )
 
-function setPageMeta(statusBarStyle: StatusBarStyle) {
+function setPageStatusBarStyle(statusBarStyle: StatusBarStyle) {
   const pages = getCurrentPages()
   if (!pages.length) {
     return
@@ -100,7 +100,7 @@ export const setNavigationBarColor =
         plus.navigator.setStatusBarStyle(statusBarStyle)
 
         // 用户调用api时同时改变当前页配置，这样在系统调用设置时，可以避免覆盖用户设置
-        setPageMeta(statusBarStyle)
+        setPageStatusBarStyle(statusBarStyle)
 
         const style = webview.getStyle()
         if (style && style.titleNView) {

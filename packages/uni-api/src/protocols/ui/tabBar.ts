@@ -47,7 +47,7 @@ export const SetTabBarItemOptions: ApiOptions<API_TYPE_SET_TAB_BAR_ITEM> = {
           params.pagePath = removeLeadingSlash(value)
         }
       },
-    } as ApiOptions<API_TYPE_SET_TAB_BAR_ITEM>['formatArgs'],
+    } as Required<ApiOptions<API_TYPE_SET_TAB_BAR_ITEM>>['formatArgs'],
     IndexOptions.formatArgs
   ),
 }
@@ -66,6 +66,11 @@ export const SetTabBarStyleOptions: ApiOptions<API_TYPE_SET_TAB_BAR_STYLE> = {
   beforeInvoke: IndexOptions.beforeInvoke,
   formatArgs: {
     backgroundImage(value, params) {
+      // TODO 修复 x-app-iOS 路径转换问题，最小化影响范围
+      if (__PLATFORM__ === 'app' && __X__ && !__NODE_JS__) {
+        params.backgroundImage = value
+        return
+      }
       if (value && !GRADIENT_RE.test(value)) {
         params.backgroundImage = getRealPath(value)
       }
@@ -130,7 +135,7 @@ export const SetTabBarBadgeOptions: ApiOptions<API_TYPE_SET_TAB_BAR_BADGE> = {
           params.text = '...'
         }
       },
-    } as ApiOptions<API_TYPE_SET_TAB_BAR_BADGE>['formatArgs'],
+    } as Required<ApiOptions<API_TYPE_SET_TAB_BAR_BADGE>>['formatArgs'],
     IndexOptions.formatArgs
   ),
 }

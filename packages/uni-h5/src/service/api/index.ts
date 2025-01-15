@@ -1,3 +1,12 @@
+//#if !_NODE_JS_ && _X_
+declare global {
+  interface Window {
+    UniResizeObserver: typeof ResizeObserver
+  }
+}
+window.UniResizeObserver = window.ResizeObserver
+//#endif
+
 //#if _NODE_JS_
 // 目前这几个接口主要是 uniCloud 使用了
 // 目前采用 polyfill 解决 xhr 和 storage
@@ -20,6 +29,9 @@ export * from './device/network'
 export * from './device/accelerometer'
 export * from './device/compass'
 export * from './device/vibrate'
+export * from './device/clipboard'
+export * from './device/getWindowInfo'
+export * from './device/theme'
 
 export * from './storage/storage'
 
@@ -43,6 +55,7 @@ export * from './network/socket'
 export * from './location/getLocation'
 export * from './location/openLocation'
 export * from './location/chooseLocation'
+export * from './location/locationChange'
 
 export * from './route/navigateBack'
 export * from './route/navigateTo'
@@ -61,11 +74,13 @@ export * from './ui/startPullDownRefresh'
 export * from './ui/stopPullDownRefresh'
 export * from './ui/tabBar'
 export * from './ui/window'
+export * from './ui/getElementById'
 
 export * from './todo/index'
 
 export {
   upx2px,
+  upx2px as rpx2px,
   addInterceptor,
   removeInterceptor,
   interceptors,
@@ -91,7 +106,30 @@ export {
   $off,
   $once,
   $emit,
-  onAppLaunch,
+  onCreateVueApp,
   onLocaleChange,
+  setPageMeta,
+  getEnterOptionsSync,
+  getLaunchOptionsSync,
+  getPushClientId,
+  onPushMessage,
+  offPushMessage,
+  onAppHide,
+  onAppShow,
+  onError,
+  onPageNotFound,
+  onUnhandledRejection,
+  offAppHide,
+  offAppShow,
+  offError,
+  offPageNotFound,
+  offUnhandledRejection,
+  // 内部使用
+  invokePushCallback,
+  __f__,
 } from '@dcloudio/uni-api'
+//#endif
+
+//#if !_NODE_JS_ && _X_
+export * from './context/createCanvasContextAsync'
 //#endif

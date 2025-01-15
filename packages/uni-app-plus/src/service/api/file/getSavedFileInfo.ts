@@ -1,13 +1,13 @@
 import {
-  defineAsyncApi,
   API_GET_SAVED_FILE_INFO,
-  API_TYPE_GET_SAVED_FILE_INFO,
-  GetSavedFileInfoProtocol,
+  type API_TYPE_GET_SAVED_FILE_INFO,
   GetSavedFileInfoOptions,
+  GetSavedFileInfoProtocol,
+  defineAsyncApi,
 } from '@dcloudio/uni-api'
 import { warpPlusErrorCallback } from '../../../helpers/plus'
 
-export const getSavedFileInfo = <API_TYPE_GET_SAVED_FILE_INFO>defineAsyncApi(
+export const getSavedFileInfo = defineAsyncApi<API_TYPE_GET_SAVED_FILE_INFO>(
   API_GET_SAVED_FILE_INFO,
   ({ filePath }, { resolve, reject }) => {
     const errorCallback = warpPlusErrorCallback(reject)

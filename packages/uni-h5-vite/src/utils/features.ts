@@ -1,10 +1,11 @@
-import { ConfigEnv, UserConfig } from 'vite'
+import type { ConfigEnv, UserConfig } from 'vite'
 import {
-  parsePagesJsonOnce,
-  parseManifestJsonOnce,
   initFeatures,
+  isSsr,
+  parseManifestJsonOnce,
+  parsePagesJsonOnce,
 } from '@dcloudio/uni-cli-shared'
-import { isSsr, isSsrManifest } from './ssr'
+import { isSsrManifest } from './ssr'
 
 export function createDefine(
   command: ConfigEnv['command'],

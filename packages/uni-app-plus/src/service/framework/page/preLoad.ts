@@ -1,5 +1,7 @@
-import { ComponentPublicInstance } from 'vue'
+import type { ComponentPublicInstance } from 'vue'
 import { createWebview } from '../webview'
+import { initRouteOptions } from './routeOptions'
+import { getCurrentBasePages } from './getCurrentPages'
 
 export interface PreloadWebviewObject extends PlusWebviewWebviewObject {
   __preload__?: boolean
@@ -25,7 +27,7 @@ export function closePreloadWebview({ url }: { url: string }) {
   const webview = preloadWebviews[url]
   if (webview) {
     if (webview.__page__) {
-      if (!getCurrentPages().find((page) => page === webview.__page__)) {
+      if (!getCurrentBasePages().find((page) => page === webview.__page__)) {
         // 未使用
         webview.close('none')
       } else {
@@ -51,16 +53,13 @@ export function preloadWebview({
   query: Record<string, string>
 }) {
   if (!preloadWebviews[url]) {
-    const routeOptions: UniApp.UniRoute = JSON.parse(
-      JSON.stringify(__uniRoutes.find((route) => route.path === path))
-    )
+    const routeOptions: UniApp.UniRoute = initRouteOptions(path, 'preloadPage')
     preloadWebviews[url] = createWebview({
       path,
       routeOptions,
       query,
-      webviewStyle: {
+      webviewExtras: {
         __preload__: true,
-        __query__: JSON.stringify(query),
       },
     })
   }

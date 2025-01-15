@@ -1,7 +1,10 @@
-import { ComponentInternalInstance } from 'vue';
+import type { App } from 'vue';
+import type { ComponentInternalInstance } from 'vue';
 import { ComponentOptionsBase } from 'vue';
 import { ComponentPublicInstance } from 'vue';
-import { RendererNode } from 'vue';
+import type { createApp } from 'vue';
+import type { NormalizedStyle } from '@vue/shared';
+import type { RendererNode } from 'vue';
 
 export declare const ACTION_TYPE_ADD_EVENT = 8;
 
@@ -43,6 +46,8 @@ number
 
 export declare function addFont(family: string, source: string, desc?: FontFaceDescriptors): Promise<void>;
 
+export declare function addLeadingSlash(str: string): string;
+
 /**
  * nodeId
  * event
@@ -74,6 +79,13 @@ export declare const ATTR_V_RENDERJS = ".vRenderjs";
 export declare const ATTR_V_SHOW = ".vShow";
 
 export declare const BACKGROUND_COLOR = "#f7f7f7";
+
+export declare const borderStyles: {
+    black: string;
+    white: string;
+};
+
+export declare const BUILT_IN_TAG_NAMES: string[];
 
 export declare const BUILT_IN_TAGS: string[];
 
@@ -110,13 +122,22 @@ number,
 Partial<UniNodeJSON | UniNodeJSONMinify>?
 ];
 
+export declare function createIsCustomElement(tags?: string[]): (tag: string) => boolean;
+
 export declare function createRpx2Unit(unit: string, unitRatio: number, unitPrecision: number): (val: string) => string;
 
 export declare function createUniEvent(evt: Record<string, any>): UniEvent;
 
+declare type CreateVueAppHook = (app: App) => void;
+
+export declare function customizeEvent(str: string): string;
+
 export declare const DATA_RE: RegExp;
 
-export declare function debounce(fn: Function, delay: number): {
+/**
+ * 需要手动传入 timer,主要是解决 App 平台的定制 timer
+ */
+export declare function debounce(fn: Function, delay: number, { clearTimeout, setTimeout }: Timer): {
     (this: any): void;
     cancel(): void;
 };
@@ -132,6 +153,18 @@ export declare function decode(text: string | number): string;
 
 export declare function decodedQuery(query?: Record<string, any>): Record<string, string>;
 
+export declare const defaultMiniProgramRpx2Unit: {
+    unit: string;
+    unitRatio: number;
+    unitPrecision: number;
+};
+
+export declare const defaultNVueRpx2Unit: {
+    unit: string;
+    unitRatio: number;
+    unitPrecision: number;
+};
+
 export declare const defaultRpx2Unit: {
     unit: string;
     unitRatio: number;
@@ -139,6 +172,21 @@ export declare const defaultRpx2Unit: {
 };
 
 declare type DictArray = [number, number][];
+
+export declare function dynamicSlotName(name: string): string;
+
+export declare interface Emitter {
+    e: Record<string, unknown>;
+    _id: number;
+    on: (name: EventName, callback: EventCallback, ctx?: any) => number;
+    once: (name: EventName, callback: EventCallback, ctx?: any) => number;
+    emit: (name: EventName, ...args: any[]) => this;
+    off: (name: EventName, callback?: EventCallback | null) => this;
+}
+
+export declare const Emitter: new () => Emitter;
+
+declare type EventCallback = Function;
 
 export declare class EventChannel {
     id?: number;
@@ -149,7 +197,7 @@ export declare class EventChannel {
     on(eventName: string, fn: EventChannelListener['fn']): void;
     once(eventName: string, fn: EventChannelListener['fn']): void;
     off(eventName: string, fn: EventChannelListener['fn']): void;
-    _clearCache(eventName: string): void;
+    _clearCache(eventName?: string): void;
     _addListener(eventName: string, type: EventChannelListener['type'], fn: EventChannelListener['fn']): void;
 }
 
@@ -164,7 +212,11 @@ export declare const EventModifierFlags: {
     self: number;
 };
 
-export declare function formatAppLog(type: 'log' | 'info' | 'debug' | 'warn' | 'error', filename: string, ...args: unknown[]): void;
+declare type EventName = string;
+
+export declare const forcePatchProp: (el: {
+    nodeName: string;
+}, key: string) => boolean;
 
 export declare function formatDateTime({ date, mode }: {
     date?: Date | undefined;
@@ -177,6 +229,8 @@ export declare function getCustomDataset(el: HTMLElement | HTMLElementWithDatase
 
 export declare function getEnvLocale(): string;
 
+export declare function getGlobal(): any;
+
 export declare function getLen(str?: string): number;
 
 export declare function getValueByDataPath(obj: any, path: string): unknown;
@@ -187,28 +241,69 @@ declare interface HTMLElementWithDataset extends HTMLElement {
 
 export declare const I18N_JSON_DELIMITERS: [string, string];
 
-export declare function initCustomDataset(): void;
+export declare const initCustomDatasetOnce: (isBuiltInElement?: ((el: HTMLElement) => boolean) | undefined) => void;
 
 /**
  * nodeId
  * parentNodeId
  * refNodeId
+ * nodeJson
  */
-export declare type InsertAction = [typeof ACTION_TYPE_INSERT, number, number, number];
+export declare type InsertAction = [
+typeof ACTION_TYPE_INSERT,
+number,
+number,
+number,
+Partial<UniNodeJSON | UniNodeJSONMinify>?
+];
 
 export declare const invokeArrayFns: (fns: Function[], arg?: any) => any;
 
+export declare const invokeCreateErrorHandler: (app: App, createErrorHandler: (app: App) => App['config']['errorHandler']) => ((err: unknown, instance: ComponentPublicInstance<    {}, {}, {}, {}, {}, {}, {}, {}, false, ComponentOptionsBase<any, any, any, any, any, any, any, any, any, {}, {}, string, {}>, {}, {}> | null, info: string) => void) | undefined;
+
+export declare function invokeCreateVueAppHook(app: App): void;
+
+export declare function isAppHarmonyUVueNativeTag(tag: string): boolean;
+
+export declare function isAppIOSUVueNativeTag(tag: string): boolean;
+
+export declare function isAppNativeTag(tag: string): boolean;
+
+export declare function isAppNVueNativeTag(tag: string): boolean;
+
+export declare function isAppUVueBuiltInEasyComponent(tag: string): boolean;
+
+export declare function isAppUVueNativeTag(tag: string): boolean;
+
 export declare function isBuiltInComponent(tag: string): boolean;
 
-export declare function isCustomElement(tag: string): boolean;
+export declare function isComponentInternalInstance(vm: unknown): vm is ComponentInternalInstance;
 
-export declare function isNativeTag(tag: string): boolean;
+export declare function isComponentTag(tag: string): boolean;
+
+export declare function isH5CustomElement(tag: string, isX?: boolean): boolean;
+
+export declare function isH5NativeTag(tag: string): boolean;
+
+/**
+ * 用于替代@vue/shared的isIntegerKey，原始方法在鸿蒙arkts中会引发bug。根本原因是arkts的数组的key是数字而不是字符串。
+ * 目前这个方法使用的地方都和数组有关，切记不能挪作他用。
+ * @param key
+ * @returns
+ */
+export declare const isIntegerKey: (key: unknown) => boolean;
+
+export declare function isMiniProgramNativeTag(tag: string): boolean;
+
+export declare function isMiniProgramUVueNativeTag(tag: string): boolean;
 
 export declare function isRootHook(name: string): boolean;
 
-export declare function isServiceCustomElement(_tag: string): boolean;
+export declare function isRootImmediateHook(name: string): boolean;
 
-export declare function isServiceNativeTag(tag: string): boolean;
+export declare function isUniLifecycleHook(name: string, value: unknown, checkType?: boolean): boolean;
+
+export declare function isUniXElement(name: string): boolean;
 
 export declare interface IUniPageNode {
     pageId: number;
@@ -230,6 +325,14 @@ export declare interface IUniPageNode {
 
 export declare const JSON_PROTOCOL = "json://";
 
+export declare const LINEFEED = "\n";
+
+export declare const MINI_PROGRAM_PAGE_RUNTIME_HOOKS: {
+    readonly onPageScroll: 1;
+    readonly onShareAppMessage: number;
+    readonly onShareTimeline: number;
+};
+
 export declare const NAVBAR_HEIGHT = 44;
 
 declare type NavigateToOptionEvents = Record<string, (...args: any[]) => void>;
@@ -242,9 +345,19 @@ export declare const NODE_TYPE_PAGE = 0;
 
 export declare const NODE_TYPE_TEXT = 3;
 
+export declare function normalizeClass(value: unknown): string;
+
 export declare function normalizeDataset(el: Element): any;
 
 export declare function normalizeEventType(type: string, options?: AddEventListenerOptions): string;
+
+export declare function normalizeProps(props: Record<string, any> | null): Record<string, any> | null;
+
+export declare function normalizeStyle(value: unknown): NormalizedStyle | string | undefined;
+
+export declare function normalizeStyles<T extends object>(pageStyle: T, themeConfig?: UniApp.ThemeJson, mode?: UniApp.ThemeMode): T;
+
+export declare function normalizeTabBarStyles(borderStyle?: string): string | undefined;
 
 export declare function normalizeTarget(el: HTMLElement): {
     id: string;
@@ -252,6 +365,116 @@ export declare function normalizeTarget(el: HTMLElement): {
     offsetTop: number;
     offsetLeft: number;
 };
+
+export declare function normalizeTitleColor(titleColor: string): "#000000" | "#ffffff";
+
+export declare interface NVue {
+    config: NVueConfigAPI;
+    document: NVueDocument;
+    requireModule: (name: string) => Record<string, unknown> | void;
+    supports: (condition: string) => boolean | void;
+    isRegisteredModule: (name: string, method?: string) => boolean;
+    isRegisteredComponent: (name: string) => boolean;
+}
+
+export declare const NVUE_BUILT_IN_TAGS: string[];
+
+export declare const NVUE_U_BUILT_IN_TAGS: string[];
+
+export declare interface NVueConfigAPI {
+    bundleUrl: string;
+    bundleType: string;
+    env: NVueEnvironment;
+}
+
+export declare interface NVueDocument {
+    id: string;
+    URL: string;
+    taskCenter: NVueTaskCenter;
+    open: () => void;
+    close: () => void;
+    createElement: (tagName: string, props?: Record<string, unknown>) => NVueElement;
+    createText: (text: string) => Record<string, unknown>;
+    createComment: (text: string) => Record<string, unknown>;
+    fireEvent: (type: string) => void;
+    destroy: () => void;
+}
+
+export declare interface NVueElement {
+    nodeType: number;
+    nodeId: string;
+    type: string;
+    ref: string;
+    text?: string;
+    attr: Record<string, unknown>;
+    styleSheet: Record<string, Record<string, Record<string, unknown>>>;
+    classList: string[];
+    parentNode: NVueElement | null;
+    children: Array<NVueElement>;
+    previousSibling: NVueElement | null;
+    nextSibling: NVueElement | null;
+    appendChild: (node: NVueElement) => void;
+    removeChild: (node: NVueElement, preserved?: boolean) => void;
+    insertBefore: (node: NVueElement, before: NVueElement) => void;
+    insertAfter: (node: NVueElement, after: NVueElement) => void;
+    setAttr: (key: string, value: any, silent?: boolean) => void;
+    setAttrs: (attrs: Record<string, unknown>, silent?: boolean) => void;
+    setClassList: (classList: string[]) => void;
+    setStyle: (key: string, value: any, silent?: boolean) => void;
+    setStyles: (attrs: Record<string, unknown>, silent?: boolean) => void;
+    setStyleSheet: (styleSheet: Record<string, Record<string, Record<string, unknown>>>) => void;
+    addEvent: (type: string, handler: Function, args?: Array<any>) => void;
+    removeEvent: (type: string) => void;
+    fireEvent: (type: string) => void;
+    destroy: () => void;
+}
+
+export declare interface NVueEnvironment {
+    platform: string;
+    osName: string;
+    osVersion: string;
+    appName: string;
+    appVersion: string;
+    deviceModel: string;
+    deviceWidth: number;
+    deviceHeight: number;
+    scale: number;
+    userAgent?: string;
+    dpr?: number;
+    rem?: number;
+}
+
+export declare interface NVueInstanceContext {
+    Vue: Vue_2;
+}
+
+export declare interface NVueInstanceOption {
+    instanceId: string;
+    config: NVueConfigAPI;
+    document?: NVueDocument;
+    Vue?: Vue_2;
+    app?: ComponentPublicInstance;
+    data?: Record<string, unknown>;
+}
+
+export declare interface NVueRuntimeContext {
+    nvue: NVue;
+    service: Record<string, unknown>;
+    BroadcastChannel?: Function;
+    SharedObject: Record<string, unknown>;
+}
+
+export declare interface NVueTaskCenter {
+    instanceId: string;
+    callbackManager: unknown;
+    send: (type: string, params: Record<string, unknown>, args: any[], options?: Record<string, unknown>) => void;
+    registerHook: (componentId: string, type: string, hook: string, fn: Function) => void;
+    updateData: (componentId: string, data: Record<string, unknown> | void, callback?: Function) => void;
+}
+
+export declare const OFF_HOST_THEME_CHANGE = "offHostThemeChange";
+
+export declare const OFF_THEME_CHANGE = "offThemeChange";
 
 export declare const ON_ADD_TO_FAVORITES = "onAddToFavorites";
 
@@ -263,7 +486,13 @@ export declare const ON_BACK_PRESS = "onBackPress";
 
 export declare const ON_ERROR = "onError";
 
+export declare const ON_EXIT = "onExit";
+
 export declare const ON_HIDE = "onHide";
+
+export declare const ON_HOST_THEME_CHANGE = "onHostThemeChange";
+
+export declare const ON_INIT = "onInit";
 
 export declare const ON_KEYBOARD_HEIGHT_CHANGE = "onKeyboardHeightChange";
 
@@ -272,6 +501,8 @@ export declare const ON_LAUNCH = "onLaunch";
 export declare const ON_LOAD = "onLoad";
 
 export declare const ON_NAVIGATION_BAR_BUTTON_TAP = "onNavigationBarButtonTap";
+
+export declare const ON_NAVIGATION_BAR_CHANGE = "onNavigationBarChange";
 
 export declare const ON_NAVIGATION_BAR_SEARCH_INPUT_CHANGED = "onNavigationBarSearchInputChanged";
 
@@ -295,7 +526,11 @@ export declare const ON_READY = "onReady";
 
 export declare const ON_RESIZE = "onResize";
 
+export declare const ON_SAVE_EXIT_STATE = "onSaveExitState";
+
 export declare const ON_SHARE_APP_MESSAGE = "onShareAppMessage";
+
+export declare const ON_SHARE_CHAT = "onShareChat";
 
 export declare const ON_SHARE_TIMELINE = "onShareTimeline";
 
@@ -314,6 +549,11 @@ export declare const ON_WEB_INVOKE_APP_SERVICE = "onWebInvokeAppService";
 export declare const ON_WXS_INVOKE_CALL_METHOD = "onWxsInvokeCallMethod";
 
 export declare function once<T extends (...args: any[]) => any>(fn: T, ctx?: unknown): T;
+
+/**
+ * 提供 createApp 的回调事件，方便三方插件接收 App 对象，处理挂靠全局 mixin 之类的逻辑
+ */
+export declare function onCreateVueApp(hook: CreateVueAppHook): void;
 
 declare interface Options {
     success?: (res: any) => void;
@@ -345,6 +585,7 @@ export declare interface PageNodeOptions {
     statusbarHeight: number;
     windowTop: number;
     windowBottom: number;
+    nvueFlexDirection?: string;
 }
 
 /**
@@ -355,6 +596,8 @@ export declare type PageScrollAction = [typeof ACTION_TYPE_PAGE_SCROLL, number];
 export declare type PageUpdateAction = CreateAction | InsertAction | RemoveAction | AddEventAction | AddWxsEventAction | RemoveEventAction | SetAttributeAction | RemoveAttributeAction | SetTextAction;
 
 export declare function parseEventName(name: string): [string, EventListenerOptions | undefined];
+
+export declare function parseNVueDataset(attr?: Record<string, unknown>): Record<string, unknown>;
 
 /**
  * https://github.com/vuejs/vue-router-next/blob/master/src/query.ts
@@ -409,9 +652,13 @@ export declare function removeLeadingSlash(str: string): string;
 
 export declare const RENDERJS_MODULES = "renderjsModules";
 
+export declare function resolveComponentInstance(instance?: ComponentInternalInstance | ComponentPublicInstance): ComponentPublicInstance | undefined;
+
+export declare function resolveOwnerEl(instance: ComponentInternalInstance, multi: true): RendererNode[];
+
 export declare function resolveOwnerEl(instance: ComponentInternalInstance): RendererNode | null;
 
-export declare function resolveOwnerVm(vm: ComponentInternalInstance): ComponentPublicInstance<    {}, {}, {}, {}, {}, {}, {}, {}, false, ComponentOptionsBase<any, any, any, any, any, any, any, any, any, {}>> | undefined;
+export declare function resolveOwnerVm(vm: ComponentInternalInstance): ComponentPublicInstance<{}, {}, {}, {}, {}, {}, {}, {}, false, ComponentOptionsBase<any, any, any, any, any, any, any, any, any, {}, {}, string, {}>, {}, {}> | undefined;
 
 export declare const RESPONSIVE_MIN_WIDTH = 768;
 
@@ -421,7 +668,7 @@ export declare const sanitise: (val: unknown) => any;
 
 export declare const SCHEME_RE: RegExp;
 
-declare function scrollTo_2(scrollTop: number | string, duration: number): void;
+declare function scrollTo_2(scrollTop: number | string, duration: number, isH5?: boolean): void;
 export { scrollTo_2 as scrollTo }
 
 export declare const SELECTED_COLOR = "#0062cc";
@@ -448,11 +695,25 @@ number,
 string | number
 ];
 
+export declare const enum SetUniElementIdTagType {
+    BuiltInComponent = 1,// 如：unicloud-db
+    BuiltInRootElement = 2
+}
+
+export declare const SLOT_DEFAULT_NAME = "d";
+
+export declare function sortObject<T extends Object>(obj: T): T;
+
 export declare function stringifyQuery(obj?: Record<string, any>, encodeStr?: typeof encodeURIComponent): string;
 
 export declare const TABBAR_HEIGHT = 50;
 
 export declare const TAGS: string[];
+
+declare interface Timer {
+    setTimeout: Function;
+    clearTimeout: Function;
+}
 
 export declare const UNI_SSR = "__uniSSR";
 
@@ -463,6 +724,10 @@ export declare const UNI_SSR_GLOBAL_DATA = "globalData";
 export declare const UNI_SSR_STORE = "store";
 
 export declare const UNI_SSR_TITLE = "title";
+
+export declare const UNI_STORAGE_LOCALE = "UNI_LOCALE";
+
+export declare const UNI_UI_CONFLICT_TAGS: string[];
 
 export declare class UniBaseNode extends UniNode {
     attributes: Record<string, unknown>;
@@ -542,7 +807,7 @@ export declare class UniInputElement extends UniElement {
     set value(val: string | number);
 }
 
-export declare const UniLifecycleHooks: readonly ["onShow", "onHide", "onLaunch", "onError", "onThemeChange", "onPageNotFound", "onUnhandledRejection", "onLoad", "onReady", "onUnload", "onResize", "onBackPress", "onPageScroll", "onTabItemTap", "onReachBottom", "onPullDownRefresh", "onShareTimeline", "onAddToFavorites", "onShareAppMessage", "onNavigationBarButtonTap", "onNavigationBarSearchInputClicked", "onNavigationBarSearchInputChanged", "onNavigationBarSearchInputConfirmed", "onNavigationBarSearchInputFocusChanged"];
+export declare const UniLifecycleHooks: readonly ["onShow", "onHide", "onLaunch", "onError", "onThemeChange", "onPageNotFound", "onUnhandledRejection", "onExit", "onInit", "onLoad", "onReady", "onUnload", "onResize", "onBackPress", "onPageScroll", "onTabItemTap", "onReachBottom", "onPullDownRefresh", "onShareTimeline", "onAddToFavorites", "onShareAppMessage", "onShareChat", "onSaveExitState", "onNavigationBarButtonTap", "onNavigationBarSearchInputClicked", "onNavigationBarSearchInputChanged", "onNavigationBarSearchInputConfirmed", "onNavigationBarSearchInputFocusChanged"];
 
 export declare class UniNode extends UniEventTarget {
     nodeId?: number;
@@ -643,6 +908,27 @@ export declare class UniTextNode extends UniBaseNode {
 }
 
 export declare function updateElementStyle(element: HTMLElement, styles: Partial<CSSStyleDeclaration>): void;
+
+export declare const UVUE_BUILT_IN_TAGS: string[];
+
+export declare const UVUE_HARMONY_BUILT_IN_TAGS: string[];
+
+export declare const UVUE_IOS_BUILT_IN_TAGS: string[];
+
+export declare const UVUE_WEB_BUILT_IN_TAGS: string[];
+
+export declare const VIRTUAL_HOST_CLASS = "virtualHostClass";
+
+export declare const VIRTUAL_HOST_HIDDEN = "virtualHostHidden";
+
+export declare const VIRTUAL_HOST_ID = "virtualHostId";
+
+export declare const VIRTUAL_HOST_STYLE = "virtualHostStyle";
+
+declare interface Vue_2 {
+    createApp: typeof createApp;
+}
+export { Vue_2 as Vue }
 
 export declare const WEB_INVOKE_APPSERVICE = "WEB_INVOKE_APPSERVICE";
 

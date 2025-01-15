@@ -1,7 +1,7 @@
 import {
   CHOOSE_SOURCE_TYPES,
-  elemsInArray,
   elemInArray,
+  elemsInArray,
 } from '../../helpers/protocol'
 export const API_CHOOSE_FILE = 'chooseFile'
 export type API_TYPE_CHOOSE_FILE = typeof uni.chooseFile
@@ -29,7 +29,13 @@ export const ChooseFileOptions: ApiOptions<API_TYPE_CHOOSE_FILE> = {
       if (extension instanceof Array && extension.length === 0) {
         return 'param extension should not be empty.'
       }
-      if (!extension) params.extension = ['']
+      if (!extension) {
+        if (params.type === 'all' || !params.type) {
+          params.extension = ['']
+        } else {
+          params.extension = ['*']
+        }
+      }
     },
   },
 }

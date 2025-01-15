@@ -1,4 +1,4 @@
-import { extend } from '@vue/shared'
+import { extend, isArray } from '@vue/shared'
 import {
   onMounted,
   reactive,
@@ -14,10 +14,15 @@ import {
   useContextInfo,
   useSubscribe,
   useCustomEvent,
+  CustomEventTrigger,
+  UniElement,
 } from '@dcloudio/uni-components'
+import '@amap/amap-jsapi-types'
 import { callOptions } from '@dcloudio/uni-shared'
-import { Point } from '../../../helpers/location'
-import { Maps, Map, loadMaps, LatLng } from './maps'
+import { Point, getIsBMap, getIsAMap } from '../../../helpers/location'
+import { Maps, Map, loadMaps, LatLng, QQMap, GoogleMap } from './maps'
+import { QQMaps } from './maps/qq/types'
+import { GoogleMaps } from './maps/google/types'
 import MapMarker, {
   Props as MapMarkerProps,
   Context as MapMarkerContext,
@@ -29,6 +34,8 @@ import MapLocation, {
   Context as MapLocationContext,
   CONTEXT_ID as MAP_LOCATION_CONTEXT_ID,
 } from './MapLocation'
+import MapPolygon from './map-polygon/index'
+import { Polygon } from './map-polygon/interface'
 
 const props = {
   id: {
@@ -87,6 +94,10 @@ const props = {
       return []
     },
   },
+  polygons: {
+    type: Array as PropType<Polygon[]>,
+    default: () => [],
+  },
 }
 
 type Props = Record<keyof typeof props, any>
@@ -98,7 +109,7 @@ interface MapState {
 
 function getPoints(points: Point[]): Point[] {
   const newPoints: Point[] = []
-  if (Array.isArray(points)) {
+  if (isArray(points)) {
     points.forEach((point) => {
       if (point && point.latitude && point.longitude) {
         newPoints.push({
@@ -111,10 +122,48 @@ function getPoints(points: Point[]): Point[] {
   return newPoints
 }
 
+function getAMapPosition(
+  maps: AMap.NameSpace,
+  latitude: number,
+  longitude: number
+) {
+  return new maps.LngLat(longitude, latitude)
+}
+function getBMapPosition(maps: any, latitude: number, longitude: number) {
+  return new maps.Point(longitude, latitude)
+}
+function getGoogleOrQQMapPosition(
+  maps: QQMaps | GoogleMaps,
+  latitude: number,
+  longitude: number
+) {
+  return new maps.LatLng(latitude, longitude)
+}
+
+function getMapPosition(maps: Maps, latitude: number, longitude: number) {
+  if (getIsBMap()) {
+    return getBMapPosition(maps as any, latitude, longitude)
+  } else if (getIsAMap()) {
+    return getAMapPosition(maps as AMap.NameSpace, latitude, longitude)
+  } else {
+    return getGoogleOrQQMapPosition(
+      maps as QQMaps | GoogleMaps,
+      latitude,
+      longitude
+    )
+  }
+  // return getIsAMap() || getIsBMap()
+  //   ? getAMapPosition(maps as AMap.NameSpace, latitude, longitude)
+  //   : getGoogleOrQQMapPosition(maps as QQMaps | GoogleMaps, latitude, longitude)
+}
+
 function getLat(latLng: LatLng) {
   if ('getLat' in latLng) {
     return latLng.getLat()
   } else {
+    if (getIsBMap()) {
+      return latLng.lat
+    }
     return latLng.lat()
   }
 }
@@ -123,6 +172,9 @@ function getLng(latLng: LatLng) {
   if ('getLng' in latLng) {
     return latLng.getLng()
   } else {
+    if (getIsBMap()) {
+      return latLng.lng
+    }
     return latLng.lng()
   }
 }
@@ -141,7 +193,6 @@ function useMap(
     longitude: Number(props.longitude),
     includePoints: getPoints(props.includePoints),
   })
-  type CustomEventTrigger = ReturnType<typeof useCustomEvent>
   type OnMapReadyCallback = (
     map: Map,
     maps: Maps,
@@ -189,7 +240,12 @@ function useMap(
         state.latitude = latitude
         state.longitude = longitude
         if (map) {
-          map.setCenter(new maps.LatLng(latitude, longitude) as any)
+          const centerPosition = getMapPosition(
+            maps,
+            state.latitude,
+            state.longitude
+          )
+          map.setCenter(centerPosition as any)
         }
       }
     }
@@ -216,25 +272,42 @@ function useMap(
     return {
       scale: map.getZoom(),
       centerLocation: {
-        latitude: getLat(center),
-        longitude: getLng(center),
+        latitude: getLat(center as LatLng),
+        longitude: getLng(center as LatLng),
       },
     }
   }
   function updateCenter() {
-    map.setCenter(new maps.LatLng(state.latitude, state.longitude) as any)
+    const centerPosition = getMapPosition(maps, state.latitude, state.longitude)
+    map.setCenter(centerPosition as any)
   }
   function updateBounds() {
-    const bounds = new maps.LatLngBounds()
-    state.includePoints.forEach(({ latitude, longitude }) => {
-      const latLng = new maps.LatLng(latitude, longitude)
-      bounds.extend(latLng as any)
-    })
-    map.fitBounds(bounds as any)
+    if (getIsAMap()) {
+      const points: [number, number][] = []
+      state.includePoints.forEach((point) => {
+        points.push([point.longitude, point.latitude])
+      })
+      const bounds = new (maps as AMap.NameSpace).Bounds(...points)
+      ;(map as AMap.Map).setBounds(bounds)
+    } else if (getIsBMap()) {
+    } else {
+      const bounds = new (maps as QQMaps | GoogleMaps).LatLngBounds()
+      state.includePoints.forEach(({ latitude, longitude }) => {
+        const latLng = new (maps as QQMaps | GoogleMaps).LatLng(
+          latitude,
+          longitude
+        )
+        bounds.extend(latLng as any)
+      })
+      ;(map as QQMap | GoogleMap).fitBounds(bounds as any)
+    }
   }
   function initMap() {
     const mapEl = mapRef.value as HTMLDivElement
-    const center = new maps.LatLng(state.latitude, state.longitude)
+    const center = getMapPosition(maps, state.latitude, state.longitude)
+    const event =
+      (maps as QQMaps | GoogleMaps).event || (maps as AMap.NameSpace).Event
+    // console.log('event:', event)
     const map = new maps.Map(mapEl, {
       center: center as any,
       zoom: Number(props.scale),
@@ -251,6 +324,14 @@ function useMap(
       maxZoom: 18,
       draggable: true,
     })
+    if (getIsBMap()) {
+      // @ts-ignore
+      map.centerAndZoom(center, Number(props.scale))
+      // @ts-ignore
+      map.enableScrollWheelZoom()
+      // @ts-ignore
+      map._printLog && map._printLog('uniapp')
+    }
     watch(
       () => props.scale,
       (scale) => {
@@ -265,60 +346,97 @@ function useMap(
       }
     })
     // 需在 bounds_changed 后触发 BoundsReady
-    const boundsChangedEvent = maps.event.addListener(
-      map,
-      'bounds_changed',
-      () => {
-        boundsChangedEvent.remove()
-        emitBoundsReady()
-      }
-    )
-    maps.event.addListener(map, 'click', () => {
-      // TODO 编译器将 tap 转换为 click
-      trigger('click', {} as Event, {})
-    })
-    maps.event.addListener(map, 'dragstart', () => {
-      trigger('regionchange', {} as Event, {
-        type: 'begin',
-        causedBy: 'gesture',
+    if (getIsBMap()) {
+      // @ts-ignore
+      map.addEventListener('click', () => {
+        trigger('tap', {} as Event, {})
+        trigger('click', {} as Event, {})
       })
-    })
-    maps.event.addListener(map, 'dragend', () => {
-      trigger(
-        'regionchange',
-        {} as Event,
-        extend(
-          {
-            type: 'end',
-            causedBy: 'drag',
-          },
-          getMapInfo()
+      // @ts-ignore
+      map.addEventListener('dragstart', () => {
+        trigger('regionchange', {} as Event, {
+          type: 'begin',
+          causedBy: 'gesture',
+        })
+      })
+      // @ts-ignore
+      map.addEventListener('dragend', () => {
+        trigger(
+          'regionchange',
+          {} as Event,
+          extend(
+            {
+              type: 'end',
+              causedBy: 'drag',
+            },
+            getMapInfo()
+          )
         )
+      })
+    } else {
+      const boundsChangedEvent = event.addListener(
+        map,
+        'bounds_changed',
+        () => {
+          boundsChangedEvent.remove()
+          emitBoundsReady()
+        }
       )
-    })
-    maps.event.addListener(map, 'zoom_changed', () => {
-      emit('update:scale', map.getZoom())
-      trigger(
-        'regionchange',
-        {} as Event,
-        extend(
-          {
-            type: 'end',
-            causedBy: 'scale',
-          },
-          getMapInfo()
+      event.addListener(map, 'click', () => {
+        // TODO 编译器将 tap 转换为 click
+        trigger('tap', {} as Event, {})
+        trigger('click', {} as Event, {})
+      })
+      event.addListener(map, 'dragstart', () => {
+        trigger('regionchange', {} as Event, {
+          type: 'begin',
+          causedBy: 'gesture',
+        })
+      })
+      event.addListener(map, 'dragend', () => {
+        trigger(
+          'regionchange',
+          {} as Event,
+          extend(
+            {
+              type: 'end',
+              causedBy: 'drag',
+            },
+            getMapInfo()
+          )
         )
-      )
-    })
-    maps.event.addListener(map, 'center_changed', () => {
-      const center = map.getCenter()!
-      const latitude = getLat(center)
-      const longitude = getLng(center)
-      emit('update:latitude', latitude)
-      emit('update:longitude', longitude)
-    })
+      })
+
+      const zoomChangedCallback = () => {
+        emit('update:scale', map.getZoom())
+        trigger(
+          'regionchange',
+          {} as Event,
+          extend(
+            {
+              type: 'end',
+              causedBy: 'scale',
+            },
+            getMapInfo()
+          )
+        )
+      }
+      // QQ or Google
+      event.addListener(map, 'zoom_changed', zoomChangedCallback)
+      // AMAP
+      event.addListener(map, 'zoomend', zoomChangedCallback)
+
+      event.addListener(map, 'center_changed', () => {
+        const center = map.getCenter()!
+        const latitude = getLat(center as LatLng)
+        const longitude = getLng(center as LatLng)
+        emit('update:latitude', latitude)
+        emit('update:longitude', longitude)
+      })
+    }
     return map
   }
+
   try {
     // TODO 支持在页面外使用
     const id = useContextInfo()
@@ -329,8 +447,8 @@ function useMap(
             onMapReady(() => {
               const center = map.getCenter()!
               callOptions(data, {
-                latitude: getLat(center),
-                longitude: getLng(center),
+                latitude: getLat(center as LatLng),
+                longitude: getLng(center as LatLng),
                 errMsg: `${type}:ok`,
               })
             })
@@ -352,7 +470,12 @@ function useMap(
                 state.latitude = latitude
                 state.longitude = longitude
                 if (map) {
-                  map.setCenter(new maps.LatLng(latitude, longitude) as any)
+                  const centerPosition = getMapPosition(
+                    maps,
+                    latitude,
+                    longitude
+                  )
+                  map.setCenter(centerPosition as any)
                 }
                 onMapReady(() => {
                   callOptions(data, `${type}:ok`)
@@ -370,7 +493,7 @@ function useMap(
               if (context) {
                 try {
                   context.translate(data)
-                } catch (error) {
+                } catch (error: any) {
                   callOptions(data, `${type}:fail ${error.message}`)
                 }
                 callOptions(data, `${type}:ok`)
@@ -381,7 +504,7 @@ function useMap(
             break
           case 'includePoints':
             state.includePoints = getPoints(data.includePoints as Point[])
-            if (isBoundsReady) {
+            if (isBoundsReady || getIsAMap()) {
               updateBounds()
             }
             onBoundsReady(() => {
@@ -395,12 +518,12 @@ function useMap(
               const northeast = latLngBounds.getNorthEast()
               callOptions(data, {
                 southwest: {
-                  latitude: getLat(southwest),
-                  longitude: getLng(southwest),
+                  latitude: getLat(southwest as LatLng),
+                  longitude: getLng(southwest as LatLng),
                 },
                 northeast: {
-                  latitude: getLat(northeast),
-                  longitude: getLng(northeast),
+                  latitude: getLat(northeast as LatLng),
+                  longitude: getLng(northeast as LatLng),
                 },
                 errMsg: `${type}:ok`,
               })
@@ -423,8 +546,8 @@ function useMap(
   onMounted(() => {
     loadMaps(props.libraries, (result) => {
       maps = result
-      map = initMap()
-      emitMapReady()
+      map = initMap() as Map // 初始化地图
+      emitMapReady() // 等待的事件
       trigger('updated', {} as Event, {})
     })
   })
@@ -434,9 +557,11 @@ function useMap(
   return {
     state,
     mapRef,
+    trigger,
   }
 }
 
+export class UniMapElement extends UniElement {}
 export default /*#__PURE__*/ defineBuiltInComponent({
   name: 'Map',
   props,
@@ -453,9 +578,25 @@ export default /*#__PURE__*/ defineBuiltInComponent({
     'update:latitude',
     'update:longitude',
   ],
+  //#if _X_ && !_NODE_JS_
+  rootElement: {
+    name: 'uni-map',
+    class: UniMapElement,
+  },
+  //#endif
   setup(props, { emit, slots }) {
     const rootRef: Ref<HTMLElement | null> = ref(null)
-    const { mapRef } = useMap(props, rootRef, emit as SetupContext['emit'])
+    const { mapRef, trigger } = useMap(
+      props,
+      rootRef,
+      emit as SetupContext['emit']
+    )
+    //#if _X_ && !_NODE_JS_
+    onMounted(() => {
+      const rootElement = rootRef.value as UniMapElement
+      rootElement.attachVmProps(props)
+    })
+    //#endif
     return () => {
       return (
         <uni-map ref={rootRef} id={props.id}>
@@ -463,9 +604,9 @@ export default /*#__PURE__*/ defineBuiltInComponent({
             ref={mapRef}
             style="width: 100%; height: 100%; position: relative; overflow: hidden"
           />
-          {props.markers.map(
-            (item) => item.id && <MapMarker key={item.id} {...item} />
-          )}
+          {props.markers.map((item) => (
+            <MapMarker key={item.id} {...item} />
+          ))}
           {props.polyline.map((item) => (
             <MapPolyline {...item} />
           ))}
@@ -473,9 +614,12 @@ export default /*#__PURE__*/ defineBuiltInComponent({
             <MapCircle {...item} />
           ))}
           {props.controls.map((item) => (
-            <MapControl {...item} />
+            <MapControl {...item} trigger={trigger} />
           ))}
           {props.showLocation && <MapLocation />}
+          {props.polygons.map((item) => (
+            <MapPolygon {...item} />
+          ))}
           <div style="position: absolute;top: 0;width: 100%;height: 100%;overflow: hidden;pointer-events: none;">
             {slots.default && slots.default()}
           </div>

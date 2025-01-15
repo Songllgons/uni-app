@@ -1,4 +1,4 @@
-import { onMounted, onBeforeUnmount, reactive } from 'vue'
+import { onBeforeUnmount, onMounted, reactive } from 'vue'
 
 import { passive } from '@dcloudio/uni-shared'
 
@@ -6,11 +6,15 @@ export interface UserActionState {
   userAction: boolean
 }
 
-const passiveOptions = passive(true)
+const passiveOptions = /*#__PURE__*/ passive(true)
 const states: UserActionState[] = []
 let userInteract: number = 0
-let inited: boolean
-function addInteractListener(vm: UserActionState) {
+let inited: boolean = false
+const setUserAction = (userAction: boolean) =>
+  states.forEach((vm) => (vm.userAction = userAction))
+export function addInteractListener(
+  vm: UserActionState = { userAction: false }
+) {
   if (!inited) {
     const eventNames = [
       'touchstart',
@@ -23,16 +27,12 @@ function addInteractListener(vm: UserActionState) {
       document.addEventListener(
         eventName,
         function () {
-          states.forEach((vm) => {
-            vm.userAction = true
-            userInteract++
-            setTimeout(() => {
-              userInteract--
-              if (!userInteract) {
-                vm.userAction = false
-              }
-            }, 0)
-          })
+          !userInteract && setUserAction(true)
+          userInteract++
+
+          setTimeout(() => {
+            !--userInteract && setUserAction(false)
+          }, 0)
         },
         passiveOptions
       )
@@ -47,6 +47,7 @@ function removeInteractListener(vm: UserActionState) {
     states.splice(index, 1)
   }
 }
+export const getInteractStatus = () => !!userInteract
 
 export function useUserAction() {
   const state: UserActionState = reactive({

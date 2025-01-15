@@ -1,7 +1,7 @@
 import { NAVBAR_HEIGHT } from '@dcloudio/uni-shared'
 import { updatePageCssVar } from '@dcloudio/uni-core'
 import { useTabBar } from '../framework/setup/state'
-import { cssEnv, cssConstant } from '../service/api/base/canIUse'
+import { cssConstant, cssEnv } from '../service/api/base/canIUse'
 
 const envMethod = /*#__PURE__*/ (() =>
   cssEnv ? 'env' : cssConstant ? 'constant' : '')()
@@ -11,6 +11,7 @@ export function updateCurPageCssVar(pageMeta: UniApp.PageRouteMeta) {
   let windowBottomValue = 0
   if (
     __UNI_FEATURE_NAVIGATIONBAR__ &&
+    pageMeta.navigationBar.style !== 'custom' &&
     ['default', 'float'].indexOf(pageMeta.navigationBar.type!) > -1
   ) {
     windowTopValue = NAVBAR_HEIGHT
@@ -20,7 +21,7 @@ export function updateCurPageCssVar(pageMeta: UniApp.PageRouteMeta) {
     tabBar.shown && (windowBottomValue = parseInt(tabBar.height!))
   }
   updatePageCssVar({
-    '--window-top': normalizeWindowBottom(windowTopValue),
+    '--window-top': normalizeWindowTop(windowTopValue),
     '--window-bottom': normalizeWindowBottom(windowBottomValue),
   })
 }

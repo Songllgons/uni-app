@@ -1,29 +1,57 @@
+import { extend } from '@vue/shared'
 import {
-  isServiceNativeTag,
-  isServiceCustomElement,
+  createIsCustomElement,
+  isMiniProgramNativeTag,
+  isMiniProgramUVueNativeTag,
 } from '@dcloudio/uni-shared'
-import { EmittedFile } from 'rollup'
-import { CopyOptions, UniVitePlugin } from '@dcloudio/uni-cli-shared'
-import { TemplateCompiler } from '@vue/compiler-sfc'
 
+import {
+  type CopyOptions,
+  type MiniProgramCompilerOptions,
+  type UniVitePlugin,
+  parseManifestJsonOnce,
+  transformPageHead,
+} from '@dcloudio/uni-cli-shared'
+import type { TemplateCompiler } from '@vue/compiler-sfc'
+import type { CompilerOptions } from '@dcloudio/uni-mp-compiler'
 import * as compiler from '@dcloudio/uni-mp-compiler'
 
 export function uniOptions({
   copyOptions,
   miniProgram,
+  customElements,
+  compilerOptions,
 }: {
+  customElements?: string[]
   copyOptions: CopyOptions
-  miniProgram: {
-    emitFile?: (emittedFile: EmittedFile) => string
-  }
+  miniProgram: MiniProgramCompilerOptions
+  compilerOptions?: CompilerOptions
 }): UniVitePlugin['uni'] {
+  const manifest = parseManifestJsonOnce(process.env.UNI_INPUT_DIR)
+  const platformOptions = manifest[process.env.UNI_PLATFORM] || {}
+  const isX = process.env.UNI_APP_X === 'true'
+  const mergeVirtualHostAttributes =
+    platformOptions.mergeVirtualHostAttributes != null
+      ? platformOptions.mergeVirtualHostAttributes
+      : isX
+
   return {
     copyOptions,
     compiler: compiler as TemplateCompiler,
     compilerOptions: {
-      miniProgram,
-      isNativeTag: isServiceNativeTag,
-      isCustomElement: isServiceCustomElement,
-    },
+      root: process.env.UNI_INPUT_DIR,
+      miniProgram: extend({}, miniProgram, {
+        component: extend({}, miniProgram.component, {
+          mergeVirtualHostAttributes,
+        }),
+      }),
+      isNativeTag: isX ? isMiniProgramUVueNativeTag : isMiniProgramNativeTag,
+      isCustomElement: createIsCustomElement(customElements),
+      ...compilerOptions,
+      nodeTransforms: [
+        transformPageHead,
+        ...(compilerOptions?.nodeTransforms || []),
+      ],
+    } as any,
   }
 }

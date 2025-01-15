@@ -1,3 +1,6 @@
+import { getJSONP } from './getJSONP'
+import { loadMaps } from '../view/components/map/maps'
+
 export interface Point {
   latitude: number
   longitude: number
@@ -11,24 +14,136 @@ export const ICON_PATH_ORIGIN =
 export const ICON_PATH_TARGET =
   'data:image/png;base64,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'
 
-export enum MapType {
+export const enum MapType {
   QQ = 'qq',
   GOOGLE = 'google',
+  AMAP = 'AMap',
+  BMAP = 'BMapGL',
   UNKNOWN = '',
 }
 
+export type TranslateCoordinateSystemOptions = ({
+  coords,
+  skip,
+}: {
+  coords: GeolocationCoordinates
+  skip?: boolean
+}) => void
+
 export function getMapInfo() {
-  let type: MapType = MapType.UNKNOWN
-  let key: string = ''
+  if (__uniConfig.bMapKey) {
+    return {
+      type: MapType.BMAP,
+      key: __uniConfig.bMapKey,
+    }
+  }
   if (__uniConfig.qqMapKey) {
-    type = MapType.QQ
-    key = __uniConfig.qqMapKey
-  } else if (__uniConfig.googleMapKey) {
-    type = MapType.GOOGLE
-    key = __uniConfig.googleMapKey
+    return {
+      type: MapType.QQ,
+      key: __uniConfig.qqMapKey,
+    }
+  }
+  if (__uniConfig.googleMapKey) {
+    return {
+      type: MapType.GOOGLE,
+      key: __uniConfig.googleMapKey,
+    }
+  }
+  if (__uniConfig.aMapKey) {
+    return {
+      type: MapType.AMAP,
+      key: __uniConfig.aMapKey,
+      securityJsCode: __uniConfig.aMapSecurityJsCode,
+      serviceHost: __uniConfig.aMapServiceHost,
+    }
   }
   return {
-    type,
-    key,
+    type: MapType.UNKNOWN,
+    key: '',
   }
+}
+
+let IS_AMAP = false
+let hasGetIsAMap = false
+export const getIsAMap = () => {
+  if (hasGetIsAMap) {
+    return IS_AMAP
+  } else {
+    hasGetIsAMap = true
+    return (IS_AMAP = getMapInfo().type === MapType.AMAP)
+  }
+}
+
+export const getIsBMap = () => {
+  return getMapInfo().type === MapType.BMAP
+}
+
+export function translateCoordinateSystem(
+  type: string | undefined,
+  coords: GeolocationCoordinates,
+  skip?: boolean
+) {
+  const mapInfo = getMapInfo()
+  const wgs84Map = [MapType.GOOGLE]
+  if (
+    (type && type.toUpperCase() === 'WGS84') ||
+    wgs84Map.includes(mapInfo.type) ||
+    skip
+  ) {
+    return Promise.resolve(coords)
+  }
+  if (mapInfo.type === MapType.QQ) {
+    return new Promise((resolve: GeolocationCoordinates | any) => {
+      getJSONP(
+        `https://apis.map.qq.com/ws/coord/v1/translate?type=1&locations=${coords.latitude},${coords.longitude}&key=${mapInfo.key}&output=jsonp`,
+        {
+          callback: 'callback',
+        },
+        (res: any) => {
+          if ('locations' in res && res.locations.length) {
+            const { lng, lat } = res.locations[0]
+            resolve({
+              longitude: lng,
+              latitude: lat,
+              altitude: coords.altitude,
+              accuracy: coords.accuracy,
+              altitudeAccuracy: coords.altitudeAccuracy,
+              heading: coords.heading,
+              speed: coords.speed,
+            })
+          } else {
+            resolve(coords)
+          }
+        },
+        () => resolve(coords)
+      )
+    })
+  }
+  if (mapInfo.type === MapType.AMAP) {
+    return new Promise((resolve: GeolocationCoordinates | any) => {
+      loadMaps([], () => {
+        window.AMap.convertFrom(
+          [coords.longitude, coords.latitude],
+          'gps',
+          (_: string, res: any) => {
+            if (res.info === 'ok' && res.locations.length) {
+              const { lat, lng } = res.locations[0]
+              resolve({
+                longitude: lng,
+                latitude: lat,
+                altitude: coords.altitude,
+                accuracy: coords.accuracy,
+                altitudeAccuracy: coords.altitudeAccuracy,
+                heading: coords.heading,
+                speed: coords.speed,
+              })
+            } else {
+              resolve(coords)
+            }
+          }
+        )
+      })
+    })
+  }
+  return Promise.reject(new Error('translate coordinate system faild'))
 }

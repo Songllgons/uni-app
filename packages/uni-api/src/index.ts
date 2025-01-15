@@ -2,6 +2,7 @@ export * from './service/base/base64'
 export * from './service/base/upx2px'
 export * from './service/base/interceptor'
 export * from './service/base/eventBus'
+export * from './service/base/__f__'
 
 export * from './service/context/createVideoContext'
 export * from './service/context/createMapContext'
@@ -15,10 +16,14 @@ export * from './service/ui/createAnimation'
 export * from './service/ui/tabBar'
 export * from './service/ui/window'
 export * from './service/ui/locale'
+export * from './service/ui/setPageMeta'
+export * from './service/ui/background'
 
 export * from './service/keyboard/getSelectedTextRange'
 
-export * from './service/hook/app'
+export * from './service/lifecycle/app'
+
+export * from './service/plugin/push'
 
 // protocols
 export * from './protocols/base/canIUse'
@@ -38,6 +43,9 @@ export * from './protocols/device/ibeacon'
 export * from './protocols/device/brightness'
 export * from './protocols/device/soterAuthentication'
 export * from './protocols/device/scanCode'
+export * from './protocols/device/getSystemSetting'
+export * from './protocols/device/getAppAuthorizeSetting'
+export * from './protocols/device/openAppAuthorizeSetting'
 
 export * from './protocols/storage/storage'
 
@@ -73,6 +81,7 @@ export * from './protocols/network/uploadFile'
 export * from './protocols/network/socket'
 
 export * from './protocols/location/getLocation'
+export * from './protocols/location/locationChange'
 
 export * from './protocols/route/route'
 
@@ -93,12 +102,15 @@ export * from './protocols/plugin/getProvider'
 export * from './protocols/plugin/oauth'
 export * from './protocols/plugin/share'
 export * from './protocols/plugin/requestPayment'
+export * from './protocols/plugin/push'
 
 // ad
 export * from './protocols/ad/rewardedVideoAd'
 export * from './protocols/ad/fullScreenVideoAd'
 export * from './protocols/ad/interstitialAd'
 export * from './protocols/ad/interactiveAd'
+
+export { onCreateVueApp } from '@dcloudio/uni-shared'
 
 // helpers
 export {
@@ -117,7 +129,6 @@ export {
 export { handlePromise } from './helpers/api/promise'
 export { invokeApi, wrapperReturnValue } from './helpers/interceptor'
 export { requestComponentObserver } from './helpers/requestComponentObserver'
-
 // types
 
 export { DefineAsyncApiFn } from './helpers/api'

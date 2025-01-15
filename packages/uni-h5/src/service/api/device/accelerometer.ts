@@ -1,32 +1,32 @@
 import {
-  defineAsyncApi,
-  API_ON_ACCELEROMETER,
-  API_TYPE_ON_ACCELEROMETER_CHANGE,
   API_OFF_ACCELEROMETER,
-  API_TYPE_OFF_ACCELEROMETER_CHANGE,
+  API_ON_ACCELEROMETER,
   API_START_ACCELEROMETER,
-  API_TYPE_START_ACCELEROMETER,
   API_STOP_ACCELEROMETER,
-  API_TYPE_STOP_ACCELEROMETER,
+  type API_TYPE_OFF_ACCELEROMETER_CHANGE,
+  type API_TYPE_ON_ACCELEROMETER_CHANGE,
+  type API_TYPE_START_ACCELEROMETER,
+  type API_TYPE_STOP_ACCELEROMETER,
+  defineAsyncApi,
+  defineOffApi,
   defineOnApi,
 } from '@dcloudio/uni-api'
 
 let listener: ((event: DeviceMotionEvent) => void) | null = null
 
-export const onAccelerometerChange = <API_TYPE_ON_ACCELEROMETER_CHANGE>(
-  defineOnApi(API_ON_ACCELEROMETER, () => {
+export const onAccelerometerChange =
+  defineOnApi<API_TYPE_ON_ACCELEROMETER_CHANGE>(API_ON_ACCELEROMETER, () => {
     startAccelerometer()
   })
-)
 
-export const offAccelerometerChange = <API_TYPE_OFF_ACCELEROMETER_CHANGE>(
-  defineOnApi(API_OFF_ACCELEROMETER, () => {
+export const offAccelerometerChange =
+  defineOffApi<API_TYPE_OFF_ACCELEROMETER_CHANGE>(API_OFF_ACCELEROMETER, () => {
     stopAccelerometer()
   })
-)
 
-export const startAccelerometer = <API_TYPE_START_ACCELEROMETER>(
-  defineAsyncApi(API_START_ACCELEROMETER, (_, { resolve, reject }) => {
+export const startAccelerometer = defineAsyncApi<API_TYPE_START_ACCELEROMETER>(
+  API_START_ACCELEROMETER,
+  (_, { resolve, reject }) => {
     if (!window.DeviceMotionEvent) {
       reject()
       return
@@ -44,9 +44,10 @@ export const startAccelerometer = <API_TYPE_START_ACCELEROMETER>(
       window.addEventListener('devicemotion', listener, false)
     }
     if (!listener) {
-      if (DeviceMotionEvent.requestPermission) {
-        DeviceMotionEvent.requestPermission()
-          .then((res) => {
+      if ((DeviceMotionEvent as any).requestPermission) {
+        ;(DeviceMotionEvent as any)
+          .requestPermission()
+          .then((res: string) => {
             if (res === 'granted') {
               addEventListener()
               resolve()
@@ -54,7 +55,7 @@ export const startAccelerometer = <API_TYPE_START_ACCELEROMETER>(
               reject(`${res}`)
             }
           })
-          .catch((error) => {
+          .catch((error: any) => {
             reject(`${error}`)
           })
         return
@@ -62,15 +63,16 @@ export const startAccelerometer = <API_TYPE_START_ACCELEROMETER>(
       addEventListener()
     }
     resolve()
-  })
+  }
 )
 
-export const stopAccelerometer = <API_TYPE_STOP_ACCELEROMETER>(
-  defineAsyncApi(API_STOP_ACCELEROMETER, (_, { resolve }) => {
+export const stopAccelerometer = defineAsyncApi<API_TYPE_STOP_ACCELEROMETER>(
+  API_STOP_ACCELEROMETER,
+  (_, { resolve }) => {
     if (listener) {
       window.removeEventListener('devicemotion', listener, false)
       listener = null
     }
     resolve()
-  })
+  }
 )

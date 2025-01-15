@@ -1,3 +1,5 @@
+import { isArray } from '@vue/shared'
+import { recursive } from 'merge'
 const wxPageOrientationMapping = {
   auto: [
     'portrait-primary',
@@ -13,6 +15,7 @@ export function initPlus(
   manifestJson: Record<string, any>,
   pagesJson: UniApp.PagesJson
 ) {
+  initUniStatistics(manifestJson)
   // 转换为老版本配置
   if (manifestJson.plus.modules) {
     manifestJson.permissions = manifestJson.plus.modules
@@ -31,6 +34,15 @@ export function initPlus(
     if (distribute.sdkConfigs) {
       manifestJson.plus.distribute.plugins = distribute.sdkConfigs
       delete manifestJson.plus.distribute.sdkConfigs
+    }
+    if (manifestJson.plus.darkmode) {
+      if (!(distribute.google || (distribute.google = {})).defaultNightMode) {
+        distribute.google.defaultNightMode = 'auto'
+      }
+
+      if (!(distribute.apple || (distribute.apple = {})).UIUserInterfaceStyle) {
+        distribute.apple.UIUserInterfaceStyle = 'Automatic'
+      }
     }
   }
 
@@ -90,5 +102,57 @@ export function initPlus(
   // 有效值为 close,none
   if (!['close', 'none'].includes(manifestJson.plus.popGesture)) {
     manifestJson.plus.popGesture = 'close'
+  }
+}
+
+function initUniStatistics(manifestJson: Record<string, any>) {
+  // 根节点配置了统计
+  if (manifestJson.uniStatistics) {
+    manifestJson.plus.uniStatistics = recursive(
+      true,
+      manifestJson.uniStatistics,
+      manifestJson.plus.uniStatistics
+    )
+    manifestJson['app-harmony'].uniStatistics = recursive(
+      true,
+      manifestJson.uniStatistics,
+      manifestJson['app-harmony'].uniStatistics
+    )
+    delete manifestJson.uniStatistics
+  }
+  if (!process.env.UNI_CLOUD_PROVIDER) {
+    return
+  }
+  let spaces = []
+  try {
+    spaces = JSON.parse(process.env.UNI_CLOUD_PROVIDER)
+  } catch (e: any) {}
+  if (!isArray(spaces) || !spaces.length) {
+    return
+  }
+  const space = spaces[0] as {
+    provider: string
+    spaceId: string
+    spaceName: string
+    clientSecret?: string
+    endpoint?: string
+  }
+  if (!space) {
+    return
+  }
+  const uniStatistics = manifestJson.plus?.uniStatistics
+  if (!uniStatistics) {
+    return
+  }
+  if (uniStatistics.version === 2 || uniStatistics.version === '2') {
+    if (uniStatistics.uniCloud && uniStatistics.uniCloud.spaceId) {
+      return
+    }
+    uniStatistics.uniCloud = {
+      provider: space.provider,
+      spaceId: space.spaceId,
+      clientSecret: space.clientSecret,
+      endpoint: space.endpoint,
+    }
   }
 }

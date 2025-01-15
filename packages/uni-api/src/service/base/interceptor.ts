@@ -1,11 +1,17 @@
-import { isArray, isFunction, isPlainObject } from '@vue/shared'
+import {
+  isArray,
+  isFunction,
+  isPlainObject,
+  isString,
+  remove,
+} from '@vue/shared'
 
 import {
-  HOOKS,
-  Interceptor,
-  scopedInterceptors,
+  type HOOKS,
+  type Interceptor,
+  type Interceptors,
   globalInterceptors,
-  Interceptors,
+  scopedInterceptors,
 } from '../../helpers/interceptor'
 
 import { defineSyncApi } from '../../helpers/api'
@@ -38,12 +44,11 @@ function removeInterceptorHook(
   if (!interceptors || !interceptor) {
     return
   }
-  Object.keys(interceptor).forEach((hook) => {
-    if (isFunction(interceptor[hook as HOOKS])) {
-      removeHook(
-        interceptors[hook as HOOKS],
-        interceptor[hook as HOOKS] as Function
-      )
+  Object.keys(interceptor).forEach((name) => {
+    const hooks = interceptors[name as HOOKS]
+    const hook = interceptor[name as HOOKS]
+    if (isArray(hooks) && isFunction(hook)) {
+      remove(hooks, hook)
     }
   })
 }
@@ -72,20 +77,10 @@ function dedupeHooks(hooks: Function[]) {
   return res
 }
 
-function removeHook(hooks: Function[] | undefined, hook: Function) {
-  if (!hooks) {
-    return
-  }
-  const index = hooks.indexOf(hook)
-  if (index !== -1) {
-    hooks.splice(index, 1)
-  }
-}
-
 export const addInterceptor = defineSyncApi(
   API_ADD_INTERCEPTOR,
   (method: string | Interceptor, interceptor: Interceptor | undefined) => {
-    if (typeof method === 'string' && isPlainObject(interceptor)) {
+    if (isString(method) && isPlainObject(interceptor)) {
       mergeInterceptorHook(
         scopedInterceptors[method] || (scopedInterceptors[method] = {}),
         interceptor
@@ -100,7 +95,7 @@ export const addInterceptor = defineSyncApi(
 export const removeInterceptor = defineSyncApi(
   API_REMOVE_INTERCEPTOR,
   (method: string | Interceptor, interceptor: Interceptor | undefined) => {
-    if (typeof method === 'string') {
+    if (isString(method)) {
       if (isPlainObject(interceptor)) {
         removeInterceptorHook(scopedInterceptors[method], interceptor)
       } else {

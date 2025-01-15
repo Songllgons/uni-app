@@ -1,27 +1,31 @@
 import debug from 'debug'
 import crypto from 'crypto'
-import { Plugin, ResolvedConfig } from 'vite'
+import type { Plugin, ResolvedConfig } from 'vite'
 
 import { walk } from 'estree-walker'
-import { CallExpression } from 'estree'
+import type { CallExpression } from 'estree'
 
 import { createFilter } from '@rollup/pluginutils'
-import { MagicString } from '@vue/compiler-sfc'
+import MagicString from 'magic-string'
+import {
+  isCallExpression,
+  isIdentifier,
+  isMemberExpression,
+  withSourcemap,
+} from '@dcloudio/uni-cli-shared'
+import type { UniPluginFilterOptions } from '.'
 
-import { UniPluginFilterOptions } from '.'
-import { isIdentifier, isCallExpression, isMemberExpression } from '../../utils'
-
-const debugSSR = debug('vite:uni:ssr')
+const debugSSR = debug('uni:ssr')
 
 const KEYED_FUNC_RE = /(ssrRef|shallowSsrRef)/
 
 export function uniSSRPlugin(
-  _config: ResolvedConfig,
+  config: ResolvedConfig,
   options: UniPluginFilterOptions
 ): Plugin {
   const filter = createFilter(options.include, options.exclude)
   return {
-    name: 'vite:uni-ssr',
+    name: 'uni:ssr:ref',
     transform(code, id) {
       if (!filter(id)) return null
       if (!KEYED_FUNC_RE.test(code)) {
@@ -55,7 +59,7 @@ export function uniSSRPlugin(
       })
       return {
         code: s.toString(),
-        map: s.generateMap().toString(),
+        map: withSourcemap(config) ? s.generateMap().toString() : null,
       }
     },
   }

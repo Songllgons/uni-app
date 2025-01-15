@@ -1,6 +1,10 @@
-import { extend } from '@vue/shared'
-import { formatLog } from '@dcloudio/uni-shared'
+import { extend, isArray, isFunction } from '@vue/shared'
+import { addLeadingSlash, formatLog } from '@dcloudio/uni-shared'
 import { getRouteOptions } from '@dcloudio/uni-core'
+import {
+  getCurrentBasePages,
+  getPage$BasePage,
+} from '../service/framework/page/getCurrentPages'
 interface PlusResult extends Record<string, any> {
   code?: number
   message?: string
@@ -17,7 +21,7 @@ export function warpPlusSuccessCallback(
   return function successCallback(data: PlusResult) {
     delete data.code
     delete data.message
-    if (typeof after === 'function') {
+    if (isFunction(after)) {
       data = after(data)
     }
     resolve(data)
@@ -58,7 +62,7 @@ export function warpPlusMethod(
   ) {
     const object = plusObject()
     object(
-      extend({}, typeof before === 'function' ? before(options) : options, {
+      extend({}, isFunction(before) ? before(options) : options, {
         success: warpPlusSuccessCallback(resolve, after),
         fail: warpPlusErrorCallback(reject),
       })
@@ -67,12 +71,12 @@ export function warpPlusMethod(
 }
 
 export function isTabBarPage(path = '') {
-  if (!(__uniConfig.tabBar && Array.isArray(__uniConfig.tabBar.list))) {
+  if (!(__uniConfig.tabBar && isArray(__uniConfig.tabBar.list))) {
     return false
   }
   try {
     if (!path) {
-      const pages = getCurrentPages()
+      const pages = getCurrentBasePages()
       if (!pages.length) {
         return false
       }
@@ -80,10 +84,10 @@ export function isTabBarPage(path = '') {
       if (!page) {
         return false
       }
-      return page.$page.meta.isTabBar
+      return getPage$BasePage(page).meta.isTabBar
     }
     if (!/^\//.test(path)) {
-      path = '/' + path
+      path = addLeadingSlash(path)
     }
     const route = getRouteOptions(path)
     return route && route.meta.isTabBar

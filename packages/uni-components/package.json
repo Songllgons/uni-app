@@ -1,11 +1,13 @@
 {
   "name": "@dcloudio/uni-components",
-  "version": "3.0.0-alpha-3021020211012005",
+  "version": "3.0.0-alpha-4040120241205001",
   "description": "@dcloudio/uni-components",
   "main": "index.js",
   "files": [
     "style",
-    "lib"
+    "style-x",
+    "lib",
+    "lib-x"
   ],
   "repository": {
     "type": "git",
@@ -16,5 +18,14 @@
   "bugs": {
     "url": "https://github.com/dcloudio/uni-app/issues"
   },
-  "gitHead": "1efa8efd0a9eddeabdba75c020d015ebf31b8177"
+  "gitHead": "33e807d66e1fe47e2ee08ad9c59247e37b8884da",
+  "dependencies": {
+    "@dcloudio/uni-cloud": "workspace:*",
+    "@dcloudio/uni-h5": "workspace:*",
+    "@dcloudio/uni-i18n": "workspace:*"
+  },
+  "devDependencies": {
+    "@dcloudio/uni-shared": "workspace:*",
+    "@types/quill": "1.3.10"
+  }
 }

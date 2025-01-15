@@ -1,13 +1,19 @@
 import { Ref, ref, watch, onBeforeUnmount, ExtractPropTypes, inject } from 'vue'
+import { extend, isArray } from '@vue/shared'
 import {
   defineBuiltInComponent,
   useCustomEvent,
   EmitEvent,
 } from '@dcloudio/uni-components'
-import { useI18n, initI18nPickerMsgsOnce } from '@dcloudio/uni-core'
+import {
+  useI18n,
+  initI18nPickerMsgsOnce,
+  showPage,
+  Page,
+} from '@dcloudio/uni-core'
 import { UniFormCtx, uniFormKey } from '@dcloudio/uni-components'
-import { showPage, Page } from '../../../helpers/page'
 import { getNavigationBarHeight } from '../../../helpers/navigationBar'
+import { ON_THEME_CHANGE } from '@dcloudio/uni-shared'
 
 type Mode = 'selector' | 'multiSelector' | 'time' | 'date'
 type Field = 'year' | 'month' | 'day'
@@ -142,6 +148,17 @@ export default /*#__PURE__*/ defineBuiltInComponent({
     const valueSync: Ref<Array<number> | number | string | null> = ref(null)
     const page: Ref<Page | null> = ref(null)
 
+    let theme: UniApp.ThemeMode = __uniConfig.darkmode
+      ? (plus.navigator.getUIStyle() as UniApp.ThemeMode)
+      : 'light'
+    function onThemeChange(res: { theme: UniApp.ThemeMode }) {
+      theme = res.theme
+    }
+    UniViewJSBridge.subscribe(ON_THEME_CHANGE, onThemeChange)
+    onBeforeUnmount(() => {
+      UniViewJSBridge.unsubscribe(ON_THEME_CHANGE, onThemeChange)
+    })
+
     type ShowPickerData = Props & {
       value: typeof valueSync.value
       locale: ReturnType<typeof getLocale>
@@ -156,10 +173,10 @@ export default /*#__PURE__*/ defineBuiltInComponent({
       switch (props.mode) {
         case mode.MULTISELECTOR:
           {
-            if (!Array.isArray(val)) {
+            if (!isArray(val)) {
               val = []
             }
-            if (!Array.isArray(valueSync.value)) {
+            if (!isArray(valueSync.value)) {
               valueSync.value = []
             }
             const length = (valueSync.value.length = Math.max(
@@ -192,9 +209,10 @@ export default /*#__PURE__*/ defineBuiltInComponent({
       let res: { event?: Parameters<typeof emit>[0] } = { event: 'cancel' }
       page.value = showPage({
         url: '__uniapppicker',
-        data,
+        data: extend({}, data, {
+          theme,
+        }),
         style: {
-          // @ts-expect-error
           titleNView: false,
           animationType: 'none',
           animationDuration: 0,
@@ -300,7 +318,7 @@ export default /*#__PURE__*/ defineBuiltInComponent({
             valueSync.value = 0
             break
           case mode.MULTISELECTOR:
-            Array.isArray(props.value) &&
+            isArray(props.value) &&
               (valueSync.value = props.value.map((val) => 0))
             break
           case mode.DATE:

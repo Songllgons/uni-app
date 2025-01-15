@@ -8,7 +8,8 @@ import vue from '@vitejs/plugin-vue'
 import vueJsx from '@vitejs/plugin-vue-jsx'
 import babel from '@rollup/plugin-babel'
 
-import { isCustomElement } from '@dcloudio/uni-shared'
+import { cssTarget } from '@dcloudio/uni-cli-shared'
+import { isH5CustomElement } from '@dcloudio/uni-shared'
 
 function resolve(file: string) {
   return path.resolve(__dirname, file)
@@ -31,9 +32,10 @@ const rollupPlugins = [
     values: {
       // 该插件限制了不能以__开头
       _NODE_JS_: 0,
+      _X_: 0,
     },
     // 忽略 pako 内部条件编译
-    exclude: [resolve('../../node_modules/pako/**')],
+    exclude: [/pako/ as unknown as string],
   }),
   babel({
     babelHelpers: 'bundled',
@@ -66,6 +68,9 @@ export default defineConfig({
     __UNI_FEATURE_I18N_ZH_HANS__: true,
     __UNI_FEATURE_I18N_ZH_HANT__: true,
     __IMPORT_META_ENV_BASE_URL__: JSON.stringify(''),
+    'process.env.NODE_ENV': JSON.stringify('production'),
+    __X__: false,
+    __PLUS__: true,
   },
   resolve: {
     alias: [
@@ -112,14 +117,22 @@ export default defineConfig({
     vue({
       template: {
         compilerOptions: {
-          isCustomElement,
+          isCustomElement: isH5CustomElement,
         },
       },
     }),
-    vueJsx({ optimize: true, isCustomElement }),
+    vueJsx({ optimize: true, isCustomElement: isH5CustomElement }),
   ],
+  esbuild: {
+    // 强制为 es2015，否则默认为 esnext，将会生成 __publicField 代码，
+    // 部分 API 写的时候，使用了动态定义 prototype 的方式，与 __publicField 冲突，比如 createCanvasContext
+    target: 'es2015',
+  },
   build: {
-    minify: true,
+    target: 'es2015',
+    cssTarget,
+    minify: 'terser',
+    cssCodeSplit: false,
     lib: {
       name: 'uni-app-view',
       fileName: 'uni-app-view',

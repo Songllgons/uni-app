@@ -1,11 +1,12 @@
-import { showPage } from '../../../helpers/page.js'
+import { showPage } from '@dcloudio/uni-core'
 import {
-  defineAsyncApi,
   API_SCAN_CODE,
-  API_TYPE_SCAN_CODE,
+  type API_TYPE_SCAN_CODE,
+  ScanCodeOptions,
   ScanCodeProtocol,
+  defineAsyncApi,
 } from '@dcloudio/uni-api'
-import { useI18n, initI18nScanCodeMsgsOnce } from '@dcloudio/uni-core'
+import { initI18nScanCodeMsgsOnce, useI18n } from '@dcloudio/uni-core'
 import { getStatusBarStyle } from '../../../helpers/statusBar'
 
 export const scanCode = defineAsyncApi<API_TYPE_SCAN_CODE>(
@@ -92,5 +93,6 @@ export const scanCode = defineAsyncApi<API_TYPE_SCAN_CODE>(
       })
     }
   },
-  ScanCodeProtocol
+  ScanCodeProtocol,
+  ScanCodeOptions
 )

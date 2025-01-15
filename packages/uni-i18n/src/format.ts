@@ -1,4 +1,3 @@
-export const isArray = Array.isArray
 export const isObject = (val: unknown): val is Record<any, any> =>
   val !== null && typeof val === 'object'
 
@@ -89,7 +88,7 @@ export function compile(
   const compiled: Array<unknown> = []
   let index: number = 0
 
-  const mode: string = isArray(values)
+  const mode: string = Array.isArray(values)
     ? 'list'
     : isObject(values)
     ? 'named'
@@ -105,11 +104,13 @@ export function compile(
         compiled.push(token.value)
         break
       case 'list':
-        compiled.push(values[parseInt(token.value, 10)])
+        compiled.push(
+          (values as Record<string, unknown>)[parseInt(token.value, 10)]
+        )
         break
       case 'named':
         if (mode === 'named') {
-          compiled.push(values[token.value])
+          compiled.push((values as Record<string, unknown>)[token.value])
         } else {
           if (process.env.NODE_ENV !== 'production') {
             console.warn(

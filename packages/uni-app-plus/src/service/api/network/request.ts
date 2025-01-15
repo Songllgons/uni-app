@@ -1,27 +1,25 @@
-import { hasOwn, isPlainObject } from '@vue/shared'
+import { hasOwn, isArray, isPlainObject, isString } from '@vue/shared'
 import {
-  API_REQUEST,
-  API_TYPE_REQUEST,
-  defineTaskApi,
-  RequestOptions,
-  RequestProtocol,
   API_CONFIG_MTLS,
-  API_TYPE_CONFIG_MTLS,
-  defineAsyncApi,
+  API_REQUEST,
+  type API_TYPE_CONFIG_MTLS,
+  type API_TYPE_REQUEST,
   ConfigMTLSOptions,
   ConfigMTLSProtocol,
+  RequestOptions,
+  RequestProtocol,
+  defineAsyncApi,
+  defineTaskApi,
 } from '@dcloudio/uni-api'
-import { base64ToArrayBuffer } from '@dcloudio/uni-api'
+import { arrayBufferToBase64, base64ToArrayBuffer } from '@dcloudio/uni-api'
 import { requireNativePlugin } from '../plugin/requireNativePlugin'
+import type {
+  FetchCallback,
+  FetchHeaders,
+  FetchOptions,
+  Stream,
+} from './stream'
 
-type Type = 'base64' | 'text'
-type Headers = Record<string, string>
-type Options = UniApp.RequestOptions & {
-  tls: any
-  headers: Headers
-  type: Type
-  body?: string | Data
-}
 interface RequestTasks {
   abort: Function
 }
@@ -36,7 +34,7 @@ type RequestTaskState = {
 
 const cookiesParse = (header: Record<string, string>) => {
   let cookiesStr = header['Set-Cookie'] || header['set-cookie']
-  let cookiesArr = []
+  let cookiesArr: string[] = []
   if (!cookiesStr) {
     return []
   }
@@ -60,8 +58,8 @@ const cookiesParse = (header: Record<string, string>) => {
 }
 
 function formatResponse(res: RequestTaskState, args: UniApp.RequestOptions) {
-  if (typeof res.data === 'string' && res.data.charCodeAt(0) === 65279) {
-    res.data = res.data.substr(1)
+  if (isString(res.data) && res.data.charCodeAt(0) === 65279) {
+    res.data = res.data.slice(1)
   }
 
   res.statusCode = parseInt(String(res.statusCode), 10)
@@ -69,9 +67,9 @@ function formatResponse(res: RequestTaskState, args: UniApp.RequestOptions) {
   if (isPlainObject(res.header)) {
     res.header = Object.keys(res.header).reduce(function (ret, key) {
       const value = res.header[key]
-      if (Array.isArray(value)) {
+      if (isArray(value)) {
         ;(ret as any)[key] = value.join(',')
-      } else if (typeof value === 'string') {
+      } else if (isString(value)) {
         ;(ret as any)[key] = value
       }
       return ret
@@ -118,8 +116,7 @@ export const request = defineTaskApi<API_TYPE_REQUEST>(
       responseType,
       sslVerify,
       firstIpv4,
-      // NOTE 属性有但是types没有
-      // @ts-ignore
+      // @ts-expect-error tls 缺少 types 类型
       tls,
     } = args
 
@@ -133,14 +130,15 @@ export const request = defineTaskApi<API_TYPE_REQUEST>(
 
     if (
       method !== 'GET' &&
+      contentType &&
       contentType.indexOf('application/json') === 0 &&
       isPlainObject(data)
     ) {
       data = JSON.stringify(data)
     }
 
-    const stream = requireNativePlugin('stream')
-    const headers: Headers = {}
+    const stream: Stream = requireNativePlugin('stream')
+    const headers: FetchHeaders = {}
     let abortTimeout: ReturnType<typeof setTimeout>
     let aborted: boolean
     let hasContentType = false
@@ -153,10 +151,10 @@ export const request = defineTaskApi<API_TYPE_REQUEST>(
         if (
           method !== 'GET' &&
           header[name].indexOf('application/x-www-form-urlencoded') === 0 &&
-          typeof data !== 'string' &&
+          !isString(data) &&
           !(data instanceof ArrayBuffer)
         ) {
-          const bodyArray = []
+          const bodyArray: string[] = []
           for (const key in data) {
             if (hasOwn(data, key)) {
               bodyArray.push(
@@ -183,70 +181,74 @@ export const request = defineTaskApi<API_TYPE_REQUEST>(
       }, timeout + 200) // TODO +200 发消息到原生层有时间开销，以后考虑由原生层回调超时
     }
 
-    const options: Options = {
+    const options: FetchOptions = {
       method,
       url: url.trim(),
-      // weex 官方文档有误，headers 类型实际 object，用 string 类型会无响应
       headers,
       type: responseType === 'arraybuffer' ? 'base64' : 'text',
-      // weex 官方文档未说明实际支持 timeout，单位：ms
       timeout: timeout || 6e5,
       // 配置和weex模块内相反
       sslVerify: !sslVerify,
       firstIpv4: firstIpv4,
       tls,
     }
-
+    let withArrayBuffer: boolean = false
     if (method !== 'GET') {
-      options.body = typeof data === 'string' ? data : JSON.stringify(data)
-    }
-
-    stream.fetch(
-      options,
-      ({
-        ok,
-        status,
-        data,
-        headers,
-        errorMsg,
-      }: {
-        ok: boolean
-        status: number
-        data: string
-        headers: Headers
-        errorMsg: string
-      }) => {
-        if (aborted) {
-          return
-        }
-        if (abortTimeout) {
-          clearTimeout(abortTimeout)
-        }
-        const statusCode = status
-        if (statusCode > 0) {
-          resolve(
-            formatResponse(
-              {
-                data:
-                  ok && responseType === 'arraybuffer'
-                    ? base64ToArrayBuffer(data)
-                    : data,
-                statusCode,
-                header: headers,
-                cookies: cookiesParse(headers),
-              },
-              args
-            )
-          )
-        } else {
-          let errMsg = 'abort statusCode:' + statusCode
-          if (errorMsg) {
-            errMsg = errMsg + ' ' + errorMsg
-          }
-          reject(errMsg)
-        }
+      if (toString.call(data) === '[object ArrayBuffer]') {
+        withArrayBuffer = true
+      } else {
+        options.body = isString(data) ? data : JSON.stringify(data)
       }
-    )
+    }
+    const callback: FetchCallback = ({
+      ok,
+      status,
+      data,
+      headers,
+      errorMsg,
+    }) => {
+      if (aborted) {
+        return
+      }
+      if (abortTimeout) {
+        clearTimeout(abortTimeout)
+      }
+      const statusCode = status
+      if (statusCode > 0) {
+        resolve(
+          formatResponse(
+            {
+              data:
+                ok && responseType === 'arraybuffer'
+                  ? base64ToArrayBuffer(data)
+                  : data,
+              statusCode,
+              header: headers,
+              cookies: cookiesParse(headers),
+            },
+            args
+          )
+        )
+      } else {
+        let errMsg = 'abort statusCode:' + statusCode
+        if (errorMsg) {
+          errMsg = errMsg + ' ' + errorMsg
+        }
+        reject(errMsg)
+      }
+    }
+    if (withArrayBuffer) {
+      stream.fetchWithArrayBuffer(
+        {
+          '@type': 'binary',
+          base64: arrayBufferToBase64(data as ArrayBuffer),
+        },
+        options,
+        callback
+      )
+    } else {
+      stream.fetch(options, callback)
+    }
 
     return new RequestTask({
       abort() {

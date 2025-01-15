@@ -1,10 +1,11 @@
 import {
-  defineAsyncApi,
   API_GET_LOCATION,
-  API_TYPE_GET_LOCATION,
-  GetLocationProtocol,
+  type API_TYPE_GET_LOCATION,
   GetLocationOptions,
+  GetLocationProtocol,
+  defineAsyncApi,
 } from '@dcloudio/uni-api'
+import { registerServiceMethod } from '@dcloudio/uni-core'
 
 import { gcj02towgs84, wgs84togcj02 } from '../../../helpers/location'
 
@@ -39,10 +40,16 @@ function getLocationSuccess(
   })
 }
 
-export const getLocation = <API_TYPE_GET_LOCATION>defineAsyncApi(
+export const getLocation = defineAsyncApi<API_TYPE_GET_LOCATION>(
   API_GET_LOCATION,
   (
-    { type = 'wgs84', geocode = false, altitude = false },
+    {
+      type = 'wgs84',
+      geocode = false,
+      altitude = false,
+      highAccuracyExpireTime,
+      isHighAccuracy = false,
+    },
     { resolve, reject }
   ) => {
     plus.geolocation.getCurrentPosition(
@@ -60,10 +67,49 @@ export const getLocation = <API_TYPE_GET_LOCATION>defineAsyncApi(
       },
       {
         geocode: geocode,
-        enableHighAccuracy: altitude,
+        enableHighAccuracy: isHighAccuracy || altitude,
+        timeout: highAccuracyExpireTime,
+        coordsType: type,
       }
     )
   },
   GetLocationProtocol,
   GetLocationOptions
 )
+
+interface IGetLocationOptions {
+  type?: 'wgs84' | 'gcj02'
+  altitude?: boolean
+  highAccuracyExpireTime?: number
+  isHighAccuracy?: boolean
+}
+
+export function subscribeGetLocation() {
+  registerServiceMethod(
+    API_GET_LOCATION,
+    (args: IGetLocationOptions, resolve) => {
+      getLocation({
+        type: args.type,
+        altitude: args.altitude,
+        highAccuracyExpireTime: args.highAccuracyExpireTime,
+        isHighAccuracy: args.isHighAccuracy,
+        success(res) {
+          resolve({
+            latitude: res.latitude,
+            longitude: res.longitude,
+            speed: res.speed,
+            accuracy: res.accuracy,
+            altitude: res.altitude,
+            verticalAccuracy: res.verticalAccuracy,
+            horizontalAccuracy: res.horizontalAccuracy,
+          })
+        },
+        fail(err) {
+          resolve({
+            errMsg: err.errMsg || 'getLocation:fail',
+          })
+        },
+      })
+    }
+  )
+}

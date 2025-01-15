@@ -1,5 +1,5 @@
 import { extend } from '@vue/shared'
-import { onMounted, computed, ref, onUnmounted } from 'vue'
+import { computed, onMounted, onUnmounted, ref } from 'vue'
 
 type Popover = {
   left: number
@@ -95,7 +95,7 @@ export function usePopupStyle(props: Data) {
     const fixSize = () => {
       const { windowWidth, windowHeight, windowTop } = uni.getSystemInfoSync()
       popupWidth.value = windowWidth
-      popupHeight.value = windowHeight + windowTop
+      popupHeight.value = windowHeight + (windowTop || 0)
     }
     window.addEventListener('resize', fixSize)
     fixSize()

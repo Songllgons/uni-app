@@ -1,4 +1,3 @@
-const isArray = Array.isArray;
 const isObject = (val) => val !== null && typeof val === 'object';
 const defaultDelimiters = ['{', '}'];
 class BaseFormatter {
@@ -60,7 +59,7 @@ function parse(format, [startDelimiter, endDelimiter]) {
 function compile(tokens, values) {
     const compiled = [];
     let index = 0;
-    const mode = isArray(values)
+    const mode = Array.isArray(values)
         ? 'list'
         : isObject(values)
             ? 'named'
@@ -121,6 +120,10 @@ function normalizeLocale(locale, messages) {
         return locale;
     }
     locale = locale.toLowerCase();
+    if (locale === 'chinese') {
+        // 支付宝
+        return LOCALE_ZH_HANS;
+    }
     if (locale.indexOf('zh') === 0) {
         if (locale.indexOf('-hans') > -1) {
             return LOCALE_ZH_HANS;
@@ -133,7 +136,11 @@ function normalizeLocale(locale, messages) {
         }
         return LOCALE_ZH_HANS;
     }
-    const lang = startsWith(locale, [LOCALE_EN, LOCALE_FR, LOCALE_ES]);
+    let locales = [LOCALE_EN, LOCALE_FR, LOCALE_ES];
+    if (messages && Object.keys(messages).length > 0) {
+        locales = Object.keys(messages);
+    }
+    const lang = startsWith(locale, locales);
     if (lang) {
         return lang;
     }
@@ -244,10 +251,17 @@ function getDefaultLocale() {
 function initVueI18n(locale, messages = {}, fallbackLocale, watcher) {
     // 兼容旧版本入参
     if (typeof locale !== 'string') {
-        [locale, messages] = [
+        // ;[locale, messages] = [
+        //   messages as unknown as string,
+        //   locale as unknown as LocaleMessages,
+        // ]
+        // 暂不使用数组解构，uts编译器暂未支持。
+        const options = [
             messages,
             locale,
         ];
+        locale = options[0];
+        messages = options[1];
     }
     if (typeof locale !== 'string') {
         // 因为小程序平台，uni-i18n 和 uni 互相引用，导致此时访问 uni 时，为 undefined
@@ -415,7 +429,7 @@ function compileJsonObj(jsonObj, localeValues, delimiters) {
     return jsonObj;
 }
 function walkJsonObj(jsonObj, walk) {
-    if (isArray(jsonObj)) {
+    if (Array.isArray(jsonObj)) {
         for (let i = 0; i < jsonObj.length; i++) {
             if (walk(jsonObj, i)) {
                 return true;

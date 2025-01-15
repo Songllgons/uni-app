@@ -1,7 +1,7 @@
 import {
-  defineAsyncApi,
   API_GET_SAVED_LIST,
-  API_TYPE_GET_SAVED_LIST,
+  type API_TYPE_GET_SAVED_LIST,
+  defineAsyncApi,
 } from '@dcloudio/uni-api'
 import { warpPlusErrorCallback } from '../../../helpers/plus'
 
@@ -30,20 +30,21 @@ function getSavedFileDir(
   )
 }
 
-export const getSavedFileList = <API_TYPE_GET_SAVED_LIST>(
-  defineAsyncApi(API_GET_SAVED_LIST, (_, { resolve, reject }) => {
+export const getSavedFileList = defineAsyncApi<API_TYPE_GET_SAVED_LIST>(
+  API_GET_SAVED_LIST,
+  (_, { resolve, reject }) => {
     const errorCallback = warpPlusErrorCallback(reject)
 
     getSavedFileDir((entry) => {
       var reader = entry.createReader()
 
-      var fileList: object[] = []
+      var fileList: UniApp.GetSavedFileListSuccessFileItem[] = []
       reader.readEntries((entries: any[]) => {
         if (entries && entries.length) {
           entries.forEach((entry) => {
             entry.getMetadata(
               (meta: {
-                modificationTime: { getTime: () => void }
+                modificationTime: { getTime: () => number }
                 size: any
               }) => {
                 fileList.push({
@@ -68,5 +69,5 @@ export const getSavedFileList = <API_TYPE_GET_SAVED_LIST>(
         }
       }, errorCallback)
     }, errorCallback)
-  })
+  }
 )

@@ -1,16 +1,26 @@
 import {
-  formatLog,
   ON_APP_ENTER_BACKGROUND,
   ON_APP_ENTER_FOREGROUND,
-  ON_THEME_CHANGE,
   ON_KEYBOARD_HEIGHT_CHANGE,
+  ON_THEME_CHANGE,
+  formatLog,
 } from '@dcloudio/uni-shared'
-import { EVENT_BACKBUTTON, backbuttonListener } from './utils'
+import { invokeHostEvent } from '../../api/plugin/sdk'
+import { SDK_UNI_MP_NATIVE_EVENT } from '../../constants'
+import {
+  EVENT_BACKBUTTON,
+  backbuttonListener,
+  getEnterOptions,
+  initEnterOptions,
+  parseRedirectInfo,
+} from './utils'
+import { changePagesNavigatorStyle } from '../../theme'
+import { getCurrentPageId } from '@dcloudio/uni-core'
 
 export function initGlobalEvent() {
   const plusGlobalEvent = (plus as any).globalEvent
   const weexGlobalEvent = weex.requireModule('globalEvent')
-  const emit = UniServiceJSBridge.emit
+  const { emit, publishHandler } = UniServiceJSBridge
 
   if (weex.config.preload) {
     plus.key.addEventListener(EVENT_BACKBUTTON, backbuttonListener)
@@ -25,7 +35,11 @@ export function initGlobalEvent() {
   })
 
   plusGlobalEvent.addEventListener('resume', () => {
-    emit(ON_APP_ENTER_FOREGROUND)
+    const info = parseRedirectInfo()
+    if (info && info.userAction) {
+      initEnterOptions(info)
+    }
+    emit(ON_APP_ENTER_FOREGROUND, getEnterOptions())
   })
 
   weexGlobalEvent.addEventListener(
@@ -35,6 +49,8 @@ export function initGlobalEvent() {
         theme: event.uistyle,
       }
       emit(ON_THEME_CHANGE, args)
+      publishHandler(ON_THEME_CHANGE, args, getCurrentPageId())
+      changePagesNavigatorStyle()
     }
   )
 
@@ -52,12 +68,21 @@ export function initGlobalEvent() {
     }
   )
 
+  weexGlobalEvent.addEventListener(
+    SDK_UNI_MP_NATIVE_EVENT,
+    function (res: { event: string; data: unknown }) {
+      if (res && res.event) {
+        invokeHostEvent(res.event, res.data)
+      }
+    }
+  )
+
   plusGlobalEvent.addEventListener('plusMessage', subscribePlusMessage)
   // nvue webview post message
   plusGlobalEvent.addEventListener('WebviewPostMessage', subscribePlusMessage)
 }
 
-function subscribePlusMessage({
+export function subscribePlusMessage({
   data,
 }: {
   data: { type: string; args: Record<string, any> }
@@ -77,3 +102,14 @@ export function onPlusMessage<T>(
 ) {
   UniServiceJSBridge.subscribe('plusMessage.' + type, callback, once)
 }
+
+// function initEnterReLaunch(info: RedirectInfo) {
+//   __uniConfig.realEntryPagePath =
+//     __uniConfig.realEntryPagePath || __uniConfig.entryPagePath
+//   __uniConfig.entryPagePath = info.path
+//   __uniConfig.entryPageQuery = info.query
+//   $reLaunch(
+//     { url: addLeadingSlash(info.path) + info.query },
+//     { resolve() {}, reject() {} }
+//   )
+// }

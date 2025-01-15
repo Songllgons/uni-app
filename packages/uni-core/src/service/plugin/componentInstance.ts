@@ -1,14 +1,20 @@
 import { EventChannel } from '@dcloudio/uni-shared'
-import { ComponentPublicInstance } from 'vue'
+import type { ComponentPublicInstance } from 'vue'
 
-export function getOpenerEventChannel(this: ComponentPublicInstance) {
+export function getOpenerEventChannel(
+  this: ComponentPublicInstance
+): EventChannel | undefined {
   if (__PLATFORM__ === 'h5') {
     if (this.$route) {
       const meta = this.$route.meta
       if (!meta.eventChannel) {
-        meta.eventChannel = new EventChannel(this.$page.id)
+        meta.eventChannel = new EventChannel(
+          __X__
+            ? this.$basePage.id
+            : (this.$page as Page.PageInstance['$page']).id
+        )
       }
-      return meta.eventChannel
+      return meta.eventChannel as EventChannel
     }
   }
   // TODO App

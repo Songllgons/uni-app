@@ -1,42 +1,42 @@
 import { queuePostFlushCb } from 'vue'
 import { isPlainObject } from '@vue/shared'
 import {
-  UniNode,
-  NODE_TYPE_PAGE,
-  UniBaseNode,
-  IUniPageNode,
-  formatLog,
-  UniEvent,
-  UniNodeJSON,
   ACTION_TYPE_ADD_EVENT,
+  ACTION_TYPE_ADD_WXS_EVENT,
   ACTION_TYPE_CREATE,
   ACTION_TYPE_INSERT,
   ACTION_TYPE_PAGE_CREATE,
   ACTION_TYPE_PAGE_CREATED,
+  ACTION_TYPE_PAGE_SCROLL,
   ACTION_TYPE_REMOVE,
   ACTION_TYPE_REMOVE_ATTRIBUTE,
   ACTION_TYPE_REMOVE_EVENT,
   ACTION_TYPE_SET_ATTRIBUTE,
   ACTION_TYPE_SET_TEXT,
-  CreateAction,
-  PageAction,
-  PageCreateAction,
-  PageCreatedAction,
-  PageScrollAction,
-  PageNodeOptions,
+  type CreateAction,
+  type IUniPageNode,
+  NODE_TYPE_PAGE,
   ON_PAGE_SCROLL,
   ON_REACH_BOTTOM,
-  ACTION_TYPE_PAGE_SCROLL,
-  ACTION_TYPE_ADD_WXS_EVENT,
+  type PageAction,
+  type PageCreateAction,
+  type PageCreatedAction,
+  type PageNodeOptions,
+  type PageScrollAction,
+  type UniBaseNode,
+  type UniEvent,
+  UniNode,
+  type UniNodeJSON,
+  formatLog,
 } from '@dcloudio/uni-shared'
 
 import {
   ACTION_MINIFY,
   ACTION_TYPE_DICT,
-  DictAction,
-  Dictionary,
-  Value,
+  type DictAction,
+  type Dictionary,
   VD_SYNC,
+  type Value,
 } from '../../../constants'
 import { getPageById } from '../page/getCurrentPages'
 
@@ -212,9 +212,14 @@ export default class UniPageNode extends UniNode implements IUniPageNode {
             createAction[5] = extras as UniNodeJSON
           }
         } else {
-          if (__DEV__) {
-            console.error(formatLog(`Insert`, action, 'not found createAction'))
+          // 部分手机上，create 和 insert 可能不在同一批次，被分批发送
+          if (extras) {
+            action[4] = extras as UniNodeJSON
           }
+          this.updateActions.push(action)
+          // if (__DEV__) {
+          //   console.error(formatLog(`Insert`, action, 'not found createAction'))
+          // }
         }
         break
     }
@@ -229,7 +234,8 @@ export default class UniPageNode extends UniNode implements IUniPageNode {
   }
   restore() {
     this.clear()
-    this.push(this.createAction)
+    // createAction 需要单独发送，因为 view 层需要现根据 create 来设置 page 的 ready
+    this.setup()
     if (this.scrollAction) {
       this.push(this.scrollAction)
     }

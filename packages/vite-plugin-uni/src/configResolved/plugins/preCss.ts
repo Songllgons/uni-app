@@ -1,22 +1,27 @@
 import debug from 'debug'
-import { Plugin } from 'vite'
+import type { Plugin, ResolvedConfig } from 'vite'
 import { createFilter } from '@rollup/pluginutils'
-import { preJs } from '@dcloudio/uni-cli-shared'
+import { preJs, preNVueJs, withSourcemap } from '@dcloudio/uni-cli-shared'
 
-import { UniPluginFilterOptions } from '.'
+import type { UniPluginFilterOptions } from '.'
 
-const debugPre = debug('vite:uni:pre-css')
-const debugPreTry = debug('vite:uni:pre-css-try')
+const debugPre = debug('uni:pre-css')
+// const debugPreTry = debug('uni:pre-css-try')
 const cssLangs = `\\.(css|less|sass|scss|styl|stylus|postcss)($|\\?)`
 const cssLangRE = new RegExp(cssLangs)
 /**
  * preprocess css
  * @param options
  */
-export function uniPreCssPlugin(options: UniPluginFilterOptions): Plugin {
+export function uniPreCssPlugin(
+  config: ResolvedConfig,
+  options: UniPluginFilterOptions
+): Plugin {
   const filter = createFilter(options.include, options.exclude)
+  const isNVue = (config as any).nvue
+  const preJsFile = isNVue ? preNVueJs : preJs
   return {
-    name: 'vite:uni-pre-css',
+    name: 'uni:pre-css',
     transform(code, id) {
       if (!cssLangRE.test(id)) {
         return
@@ -24,14 +29,14 @@ export function uniPreCssPlugin(options: UniPluginFilterOptions): Plugin {
       if (!filter(id)) {
         return
       }
-      debugPreTry(id)
+      // debugPreTry(id)
       if (!code.includes('#endif')) {
         return
       }
       debugPre(id)
       return {
-        code: preJs(code),
-        map: this.getCombinedSourcemap(),
+        code: preJsFile(code),
+        map: withSourcemap(config) ? this.getCombinedSourcemap() : null,
       }
     },
   }

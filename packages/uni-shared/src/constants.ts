@@ -1,7 +1,13 @@
+export const LINEFEED = '\n'
 export const NAVBAR_HEIGHT = 44
 export const TABBAR_HEIGHT = 50
 export const ON_REACH_BOTTOM_DISTANCE = 50
 export const RESPONSIVE_MIN_WIDTH = 768
+
+export const UNI_STORAGE_LOCALE = 'UNI_LOCALE'
+
+// quickapp-webview 不能使用 default 作为插槽名称
+export const SLOT_DEFAULT_NAME = 'd'
 
 export const COMPONENT_NAME_PREFIX = 'VUni'
 
@@ -37,13 +43,21 @@ export const ON_HIDE = 'onHide'
 export const ON_LAUNCH = 'onLaunch'
 export const ON_ERROR = 'onError'
 export const ON_THEME_CHANGE = 'onThemeChange'
+export const OFF_THEME_CHANGE = 'offThemeChange'
+export const ON_HOST_THEME_CHANGE = 'onHostThemeChange'
+export const OFF_HOST_THEME_CHANGE = 'offHostThemeChange'
 export const ON_KEYBOARD_HEIGHT_CHANGE = 'onKeyboardHeightChange'
 export const ON_PAGE_NOT_FOUND = 'onPageNotFound'
 export const ON_UNHANDLE_REJECTION = 'onUnhandledRejection'
+export const ON_EXIT = 'onExit'
 //Page
 export const ON_LOAD = 'onLoad'
 export const ON_READY = 'onReady'
 export const ON_UNLOAD = 'onUnload'
+// 百度特有
+export const ON_INIT = 'onInit'
+// 微信特有
+export const ON_SAVE_EXIT_STATE = 'onSaveExitState'
 
 export const ON_RESIZE = 'onResize'
 export const ON_BACK_PRESS = 'onBackPress'
@@ -53,10 +67,12 @@ export const ON_REACH_BOTTOM = 'onReachBottom'
 export const ON_PULL_DOWN_REFRESH = 'onPullDownRefresh'
 
 export const ON_SHARE_TIMELINE = 'onShareTimeline'
+export const ON_SHARE_CHAT = 'onShareChat' // xhs-share
 export const ON_ADD_TO_FAVORITES = 'onAddToFavorites'
 export const ON_SHARE_APP_MESSAGE = 'onShareAppMessage'
 // navigationBar
 export const ON_NAVIGATION_BAR_BUTTON_TAP = 'onNavigationBarButtonTap'
+export const ON_NAVIGATION_BAR_CHANGE = 'onNavigationBarChange'
 export const ON_NAVIGATION_BAR_SEARCH_INPUT_CLICKED =
   'onNavigationBarSearchInputClicked'
 export const ON_NAVIGATION_BAR_SEARCH_INPUT_CHANGED =
@@ -72,3 +88,9 @@ export const ON_APP_ENTER_FOREGROUND = 'onAppEnterForeground'
 export const ON_APP_ENTER_BACKGROUND = 'onAppEnterBackground'
 export const ON_WEB_INVOKE_APP_SERVICE = 'onWebInvokeAppService'
 export const ON_WXS_INVOKE_CALL_METHOD = 'onWxsInvokeCallMethod'
+
+// mergeVirtualHostAttributes
+export const VIRTUAL_HOST_STYLE = 'virtualHostStyle'
+export const VIRTUAL_HOST_CLASS = 'virtualHostClass'
+export const VIRTUAL_HOST_HIDDEN = 'virtualHostHidden'
+export const VIRTUAL_HOST_ID = 'virtualHostId'

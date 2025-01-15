@@ -1,11 +1,15 @@
+import type { ComponentInternalInstance } from 'vue'
 import { extend } from '@vue/shared'
 
-import { UniElement } from './Element'
+import type { UniElement } from './Element'
 import { DOMException } from './DOMException'
-import { normalizeEventType, UniEventListener, UniEventTarget } from './Event'
-import { UniCSSStyleDeclarationJSON } from './Style'
+import {
+  type UniEventListener,
+  UniEventTarget,
+  normalizeEventType,
+} from './Event'
+import type { UniCSSStyleDeclarationJSON } from './Style'
 import { encodeModifier } from './encode'
-import { ComponentInternalInstance } from 'vue'
 
 export const NODE_TYPE_PAGE = 0
 export const NODE_TYPE_ELEMENT = 1
@@ -30,7 +34,12 @@ function sibling(node: UniNode, type: 'n' | 'p') {
 function removeNode(node: UniNode) {
   const { parentNode } = node
   if (parentNode) {
-    parentNode.removeChild(node)
+    const { childNodes } = parentNode
+    const index = childNodes.indexOf(node)
+    if (index > -1) {
+      node.parentNode = null
+      childNodes.splice(index, 1)
+    }
   }
 }
 
@@ -169,6 +178,7 @@ export class UniNode extends UniEventTarget {
   }
 
   insertBefore(newChild: UniNode, refChild: UniNode | null): UniNode {
+    // 先从现在的父节点移除（注意：不能触发onRemoveChild，否则会生成先remove该 id，再 insert）
     removeNode(newChild)
     newChild.pageNode = this.pageNode
     newChild.parentNode = this

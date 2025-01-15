@@ -1,14 +1,14 @@
 import {
-  defineAsyncApi,
   API_GET_VIDEO_INFO,
-  API_TYPE_GET_VIDEO_INFO,
+  type API_TYPE_GET_VIDEO_INFO,
   GetVideoInfoOptions,
   GetVideoInfoProtocol,
+  defineAsyncApi,
 } from '@dcloudio/uni-api'
 
 import { urlToFile } from '../../../helpers/file'
 
-export const getVideoInfo = <API_TYPE_GET_VIDEO_INFO>defineAsyncApi(
+export const getVideoInfo = defineAsyncApi<API_TYPE_GET_VIDEO_INFO>(
   API_GET_VIDEO_INFO,
   ({ src }, { resolve, reject }) => {
     urlToFile(src, true)
@@ -35,7 +35,7 @@ export const getVideoInfo = <API_TYPE_GET_VIDEO_INFO>defineAsyncApi(
             clearTimeout(handle)
             video.onerror = null
             resolve({
-              size: file ? file.size : undefined,
+              size: Math.ceil((file ? file.size : 0) / 1024),
               duration: video.duration || 0,
               width: video.videoWidth || 0,
               height: video.videoHeight || 0,

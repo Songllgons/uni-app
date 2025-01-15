@@ -1,12 +1,18 @@
-import { ComponentInternalInstance } from 'vue'
-import { extend } from '@vue/shared'
+import type { ComponentInternalInstance } from 'vue'
+import { extend, isFunction } from '@vue/shared'
 import { normalizeTarget } from '@dcloudio/uni-shared'
-import { getWindowTop } from '../../helpers'
+import { getWindowTop, isBuiltInElement } from '../../helpers'
 import { wrapperH5WxsEvent } from './componentWxs'
 
+const isKeyboardEvent = (val: Event): val is KeyboardEvent =>
+  !val.type.indexOf('key') && val instanceof KeyboardEvent
 const isClickEvent = (val: Event): val is MouseEvent => val.type === 'click'
 const isMouseEvent = (val: Event): val is MouseEvent =>
-  val.type.indexOf('mouse') === 0
+  val.type.indexOf('mouse') === 0 || ['contextmenu'].includes(val.type)
+const isTouchEvent = (val: Event): val is TouchEvent =>
+  (typeof TouchEvent !== 'undefined' && val instanceof TouchEvent) ||
+  val.type.indexOf('touch') === 0 ||
+  ['longpress'].indexOf(val.type) >= 0
 // normalizeNativeEvent
 export function $nne(
   evt: Event,
@@ -19,23 +25,47 @@ export function $nne(
   if (!(evt instanceof Event) || !(currentTarget instanceof HTMLElement)) {
     return [evt]
   }
-  if (currentTarget.tagName.indexOf('UNI-') !== 0) {
-    return [evt]
+  const isHTMLTarget = !isBuiltInElement(currentTarget)
+  // App 平台时不返回原始事件对象 https://github.com/dcloudio/uni-app/issues/3240
+  if (__PLATFORM__ === 'h5') {
+    if (isHTMLTarget) {
+      return (
+        wrapperH5WxsEvent(
+          evt,
+          eventValue,
+          instance as ComponentInternalInstance,
+          false // 原生标签事件可能被cache，参数长度不准确，故默认不校验
+        ) || [evt]
+      )
+    }
   }
 
-  const res = createNativeEvent(evt)
+  const res = createNativeEvent(evt, isHTMLTarget)
 
-  if (isClickEvent(evt)) {
-    normalizeClickEvent(res as unknown as WechatMiniprogram.Touch, evt)
-  } else if (__PLATFORM__ === 'h5' && isMouseEvent(evt)) {
-    normalizeMouseEvent(res as unknown as WechatMiniprogram.Touch, evt)
-  } else if (evt instanceof TouchEvent) {
-    const top = getWindowTop()
-    ;(res as any).touches = normalizeTouchEvent(evt.touches, top)
-    ;(res as any).changedTouches = normalizeTouchEvent(evt.changedTouches, top)
+  if (!__X__) {
+    if (isClickEvent(evt)) {
+      normalizeClickEvent(res as WechatMiniprogram.Touch, evt)
+    } else if (isMouseEvent(evt)) {
+      normalizeMouseEvent(res as WechatMiniprogram.Touch, evt)
+    } else if (isTouchEvent(evt)) {
+      const top = getWindowTop()
+      ;(res as any).touches = normalizeTouchEvent(evt.touches, top)
+      ;(res as any).changedTouches = normalizeTouchEvent(
+        evt.changedTouches,
+        top
+      )
+    } else if (isKeyboardEvent(evt)) {
+      const proxyKeys: (keyof KeyboardEvent)[] = ['key', 'code']
+      proxyKeys.forEach((key) => {
+        Object.defineProperty(res, key, {
+          get() {
+            return evt[key]
+          },
+        })
+      })
+    }
   }
   if (__PLATFORM__ === 'h5') {
-    wrapperEvent(res, evt)
     return (
       wrapperH5WxsEvent(
         res,
@@ -48,20 +78,37 @@ export function $nne(
 }
 
 function findUniTarget(target: HTMLElement): HTMLElement {
-  while (target && target.tagName.indexOf('UNI-') !== 0) {
+  while (!isBuiltInElement(target)) {
     target = target.parentElement as HTMLElement
   }
   return target
 }
 
-export function createNativeEvent(evt: Event | TouchEvent) {
+export function createNativeEvent(
+  evt: Event | TouchEvent,
+  htmlElement: boolean = false
+) {
   const { type, timeStamp, target, currentTarget } = evt
+  let realTarget, realCurrentTarget
+  if (__X__) {
+    realTarget = htmlElement
+      ? (target as HTMLElement)
+      : findUniTarget(target as HTMLElement)
+    realCurrentTarget = currentTarget
+  } else {
+    realTarget = normalizeTarget(
+      htmlElement
+        ? (target as HTMLElement)
+        : findUniTarget(target as HTMLElement)
+    )
+    realCurrentTarget = normalizeTarget(currentTarget as HTMLElement)
+  }
   const event = {
     type,
     timeStamp,
-    target: normalizeTarget(findUniTarget(target as HTMLElement)),
+    target: realTarget,
     detail: {},
-    currentTarget: normalizeTarget(currentTarget as HTMLElement),
+    currentTarget: realCurrentTarget,
   }
   // merge stopImmediatePropagation
   if ((evt as any)._stopped) {
@@ -71,6 +118,24 @@ export function createNativeEvent(evt: Event | TouchEvent) {
     ;(event as any).touches = (evt as TouchEvent).touches
     ;(event as any).changedTouches = (evt as TouchEvent).changedTouches
   }
+
+  if (__PLATFORM__ === 'h5') {
+    if (__X__) {
+      return new Proxy(evt, {
+        get(target, key) {
+          if (key in event) {
+            return event[key]
+          }
+          const value = target[key]
+          // 处理方法调用，保持正确的 this 上下文
+          return isFunction(value) ? value.bind(target) : value
+        },
+      })
+    } else {
+      wrapperEvent(event, evt)
+    }
+  }
+
   return event
 }
 
@@ -92,7 +157,7 @@ function normalizeClickEvent(
   const { x, y } = mouseEvt
   const top = getWindowTop()
   evt.detail = { x, y: y - top }
-  evt.touches = evt.changedTouches = [createTouchEvent(mouseEvt)]
+  evt.touches = evt.changedTouches = [createTouchEvent(mouseEvt, top)]
 }
 
 function normalizeMouseEvent(evt: Record<string, any>, mouseEvt: MouseEvent) {
@@ -101,21 +166,22 @@ function normalizeMouseEvent(evt: Record<string, any>, mouseEvt: MouseEvent) {
   evt.pageY = mouseEvt.pageY - top
   evt.clientX = mouseEvt.clientX
   evt.clientY = mouseEvt.clientY - top
+  evt.touches = evt.changedTouches = [createTouchEvent(mouseEvt, top)]
 }
 
-function createTouchEvent(evt: MouseEvent) {
+function createTouchEvent(evt: MouseEvent, top: number) {
   return {
     force: 1,
     identifier: 0,
     clientX: evt.clientX,
-    clientY: evt.clientY,
+    clientY: evt.clientY - top,
     pageX: evt.pageX,
-    pageY: evt.pageY,
+    pageY: evt.pageY - top,
   }
 }
 
 function normalizeTouchEvent(touches: TouchList, top: number) {
-  const res = []
+  const res: any[] = []
   for (let i = 0; i < touches.length; i++) {
     const { identifier, pageX, pageY, clientX, clientY, force } = touches[i]
     res.push({

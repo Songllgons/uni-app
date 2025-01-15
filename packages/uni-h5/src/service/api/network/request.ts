@@ -1,11 +1,13 @@
-import { hasOwn } from '@vue/shared'
+import { hasOwn, isString } from '@vue/shared'
 import {
   API_REQUEST,
-  API_TYPE_REQUEST,
-  defineTaskApi,
+  type API_TYPE_REQUEST,
   RequestOptions,
   RequestProtocol,
+  defineTaskApi,
 } from '@dcloudio/uni-api'
+import { LINEFEED } from '@dcloudio/uni-shared'
+import type { RequestFail } from '@dcloudio/uni-app-x/types/uni'
 
 export const request = defineTaskApi<API_TYPE_REQUEST>(
   API_REQUEST,
@@ -13,7 +15,7 @@ export const request = defineTaskApi<API_TYPE_REQUEST>(
     {
       url,
       data,
-      header,
+      header = {},
       method,
       dataType,
       responseType,
@@ -22,11 +24,14 @@ export const request = defineTaskApi<API_TYPE_REQUEST>(
     },
     { resolve, reject }
   ) => {
-    let body = null
+    if (__X__) {
+      timeout = timeout == null ? __uniConfig.networkTimeout.request : timeout
+    }
+    let body: string | ArrayBuffer | null = null
     // 根据请求类型处理数据
     const contentType = normalizeContentType(header)
     if (method !== 'GET') {
-      if (typeof data === 'string' || data instanceof ArrayBuffer) {
+      if (isString(data) || data instanceof ArrayBuffer) {
         body = data
       } else {
         if (contentType === 'json') {
@@ -36,7 +41,7 @@ export const request = defineTaskApi<API_TYPE_REQUEST>(
             body = data!.toString()
           }
         } else if (contentType === 'urlencoded') {
-          const bodyArray = []
+          const bodyArray: string[] = []
           for (const key in data) {
             if (hasOwn(data, key)) {
               bodyArray.push(
@@ -62,7 +67,7 @@ export const request = defineTaskApi<API_TYPE_REQUEST>(
     const timer = setTimeout(function () {
       xhr.onload = xhr.onabort = xhr.onerror = null
       requestTask.abort()
-      reject('timeout')
+      reject<Partial<RequestFail>>('timeout', { errCode: 5 })
     }, timeout)
     xhr.responseType = responseType as 'arraybuffer' | 'text'
     xhr.onload = function () {
@@ -71,7 +76,12 @@ export const request = defineTaskApi<API_TYPE_REQUEST>(
       let res = responseType === 'text' ? xhr.responseText : xhr.response
       if (responseType === 'text' && dataType === 'json') {
         try {
+          //#if _X_
+          // @ts-expect-error
+          res = UTS.JSON.parse(res)
+          //#else
           res = JSON.parse(res)
+          //#endif
         } catch (error) {
           // 和微信一致解析失败不抛出错误
           // invoke(callbackId, {
@@ -89,11 +99,11 @@ export const request = defineTaskApi<API_TYPE_REQUEST>(
     }
     xhr.onabort = function () {
       clearTimeout(timer)
-      reject('abort')
+      reject<Partial<RequestFail>>('abort', { errCode: 600003 })
     }
     xhr.onerror = function () {
       clearTimeout(timer)
-      reject()
+      reject<Partial<RequestFail>>(undefined, { errCode: 5 })
     }
     xhr.withCredentials = withCredentials!
     xhr.send(body)
@@ -155,7 +165,7 @@ class RequestTask implements UniApp.RequestTask {
  */
 function parseHeaders(headers: string) {
   const headersObject: Record<string, string> = {}
-  headers.split('\n').forEach((header) => {
+  headers.split(LINEFEED).forEach((header) => {
     const find = header.match(/(\S+\s*):\s*(.*)/)
     if (!find || find.length !== 3) {
       return

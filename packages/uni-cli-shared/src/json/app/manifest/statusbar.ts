@@ -2,12 +2,16 @@ export function initAppStatusbar(
   manifestJson: Record<string, any>,
   pagesJson: UniApp.PagesJson
 ) {
-  const { titleColor = '#000', backgroundColor = '#000000' } =
-    pagesJson.globalStyle?.navigationBar || {}
+  const titleColor =
+    pagesJson.pages[0].style.navigationBar.titleColor ||
+    pagesJson.globalStyle.navigationBar.titleColor ||
+    '#000000'
+  const backgroundColor =
+    pagesJson.globalStyle.navigationBar.backgroundColor || '#000000'
 
   manifestJson.plus.statusbar = {
     immersed: 'supportedDevice',
-    style: titleColor === '#000' ? 'dark' : 'light',
+    style: titleColor === '#ffffff' ? 'light' : 'dark',
     background: backgroundColor,
   }
   return manifestJson

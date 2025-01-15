@@ -1,9 +1,9 @@
 import {
-  defineSyncApi,
   API_CREATE_FULL_SCREEN_VIDEO_AD,
-  API_TYPE_CREATE_FULL_SCREEN_VIDEO_AD,
+  type API_TYPE_CREATE_FULL_SCREEN_VIDEO_AD,
   CreateFullScreenVideoAdOptions,
   CreateFullScreenVideoAdProtocol,
+  defineSyncApi,
 } from '@dcloudio/uni-api'
 
 import { AdBase } from './adBase'
@@ -18,8 +18,8 @@ class FullScreenVideoAd
   }
 }
 
-export const createFullScreenVideoAd = <API_TYPE_CREATE_FULL_SCREEN_VIDEO_AD>(
-  defineSyncApi(
+export const createFullScreenVideoAd =
+  defineSyncApi<API_TYPE_CREATE_FULL_SCREEN_VIDEO_AD>(
     API_CREATE_FULL_SCREEN_VIDEO_AD,
     (options) => {
       return new FullScreenVideoAd(options)
@@ -27,4 +27,3 @@ export const createFullScreenVideoAd = <API_TYPE_CREATE_FULL_SCREEN_VIDEO_AD>(
     CreateFullScreenVideoAdProtocol,
     CreateFullScreenVideoAdOptions
   )
-)

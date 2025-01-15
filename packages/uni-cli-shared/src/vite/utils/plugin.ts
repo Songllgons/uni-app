@@ -1,6 +1,8 @@
-import { Plugin, ResolvedConfig } from 'vite'
+import type { Plugin, ResolveFn, ResolvedConfig } from 'vite'
+import { extend, isArray } from '@vue/shared'
 import { assetPlugin } from '../plugins/vitejs/plugins/asset'
-import { cssPlugin, cssPostPlugin } from '../plugins/vitejs/plugins/css'
+import { type CssUrlReplacer, cssPlugin } from '../plugins/vitejs/plugins/css'
+
 export type CreateUniViteFilterPlugin = (
   opts: UniViteFilterPluginOptions
 ) => Plugin
@@ -9,19 +11,39 @@ export interface UniViteFilterPluginOptions {
   filter: (id: string) => boolean
 }
 
-export function injectAssetPlugin(config: ResolvedConfig) {
-  replacePlugins([assetPlugin(config)], config)
+export function injectAssetPlugin(
+  config: ResolvedConfig,
+  options?: { isAndroidX: boolean }
+) {
+  replacePlugins([assetPlugin(config, options)], config)
 }
 
-export function injectCssPlugin(config: ResolvedConfig) {
-  replacePlugins([cssPlugin(config)], config)
+export function injectCssPlugin(
+  config: ResolvedConfig,
+  options?: { createUrlReplacer?: (resolve: ResolveFn) => CssUrlReplacer }
+) {
+  replacePlugins(
+    [
+      cssPlugin(config, {
+        isAndroidX: false,
+        ...options,
+      }),
+    ],
+    config
+  )
 }
 
 export function injectCssPostPlugin(
   config: ResolvedConfig,
-  { appCss, extname }: { appCss?: string; extname: string }
+  newCssPostPlugin: Plugin
 ) {
-  replacePlugins([cssPostPlugin(config, { appCss, extname })], config)
+  const oldCssPostPlugin = config.plugins.find(
+    (p) => p.name === newCssPostPlugin.name
+  )
+  // 直接覆盖原有方法，不能删除，替换，因为 unocss 在 pre 阶段已经获取到了旧的 css-post 插件对象
+  if (oldCssPostPlugin) {
+    extend(oldCssPostPlugin, newCssPostPlugin)
+  }
 }
 
 export function replacePlugins(plugins: Plugin[], config: ResolvedConfig) {
@@ -39,7 +61,7 @@ export function removePlugins(
   plugins: string | string[],
   config: ResolvedConfig
 ) {
-  if (!Array.isArray(plugins)) {
+  if (!isArray(plugins)) {
     plugins = [plugins]
   }
   plugins.forEach((name) => {
@@ -48,4 +70,15 @@ export function removePlugins(
       ;(config.plugins as Plugin[]).splice(index, 1)
     }
   })
+}
+
+export function insertBeforePlugin(
+  plugin: Plugin,
+  before: string,
+  config: ResolvedConfig
+) {
+  const index = config.plugins.findIndex((p) => p.name === before)
+  if (index > -1) {
+    ;(config.plugins as Plugin[]).splice(index, 0, plugin)
+  }
 }

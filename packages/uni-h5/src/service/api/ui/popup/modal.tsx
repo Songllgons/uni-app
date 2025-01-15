@@ -1,6 +1,30 @@
 import { onEventPrevent, onEventStop } from '@dcloudio/uni-core'
-import { Transition, defineComponent, ExtractPropTypes, ref } from 'vue'
-import { usePopup, VNODE_MASK } from './utils'
+import {
+  type ExtractPropTypes,
+  type Ref,
+  Transition,
+  defineComponent,
+  ref,
+  watchEffect,
+} from 'vue'
+import { VNODE_MASK, usePopup } from './utils'
+import {
+  getTheme,
+  offThemeChange,
+  onThemeChange,
+} from '../../../../helpers/theme'
+
+type ModalTheme = Record<UniApp.ThemeMode, { cancelColor: string }>
+const ModalTheme: ModalTheme = {
+  light: {
+    cancelColor: '#000000',
+  },
+  dark: {
+    cancelColor: 'rgb(170, 170, 170)',
+  },
+}
+const setCancelColor = (theme: UniApp.ThemeMode, cancelColor: Ref<string>) =>
+  (cancelColor.value = ModalTheme[theme].cancelColor)
 
 const props = {
   title: {
@@ -29,7 +53,13 @@ const props = {
   },
   confirmColor: {
     type: String,
+    //#if _X_
+    default: '#576b95',
+    //#endif
+    //#if !_X_
+    // @ts-expect-error
     default: '#007aff',
+    //#endif
   },
   visible: {
     type: Boolean,
@@ -58,6 +88,9 @@ export default /*#__PURE__*/ defineComponent({
         !props.editable && confirm()
       },
     })
+
+    const cancelColor = useOnThemeChange(props)
+
     return () => {
       const {
         title,
@@ -75,25 +108,41 @@ export default /*#__PURE__*/ defineComponent({
           <uni-modal v-show={visible.value} onTouchmove={onEventPrevent}>
             {VNODE_MASK}
             <div class="uni-modal">
-              {title && (
+              {title || __X__ ? (
                 <div class="uni-modal__hd">
-                  <strong class="uni-modal__title" v-text={title}></strong>
+                  <strong
+                    class="uni-modal__title"
+                    v-text={title || ''}
+                  ></strong>
                 </div>
-              )}
+              ) : null}
               {editable ? (
-                <textarea
-                  class="uni-modal__textarea"
-                  rows="1"
-                  placeholder={placeholderText}
-                  value={content}
-                  onInput={(e: Event) =>
-                    (editContent.value = (e.target! as any).value)
-                  }
-                />
+                __X__ ? (
+                  <div class="uni-modal__bd" key="uni-modal-bd-editable">
+                    <textarea
+                      class="uni-modal__textarea"
+                      rows="2"
+                      placeholder={placeholderText}
+                      value={content}
+                      onInput={(e: Event) =>
+                        (editContent.value = (e.target! as any).value)
+                      }
+                    />
+                  </div>
+                ) : (
+                  <textarea
+                    class="uni-modal__textarea"
+                    rows="1"
+                    placeholder={placeholderText}
+                    value={content}
+                    onInput={(e: Event) =>
+                      (editContent.value = (e.target! as any).value)
+                    }
+                  />
+                )
               ) : (
                 <div
                   class="uni-modal__bd"
-                  // @ts-ignore
                   onTouchmovePassive={onEventStop}
                   v-text={content}
                 ></div>
@@ -101,7 +150,7 @@ export default /*#__PURE__*/ defineComponent({
               <div class="uni-modal__ft">
                 {showCancel && (
                   <div
-                    style={{ color: props.cancelColor }}
+                    style={{ color: cancelColor.value }}
                     class="uni-modal__btn uni-modal__btn_default"
                     onClick={cancel}
                   >
@@ -123,3 +172,26 @@ export default /*#__PURE__*/ defineComponent({
     }
   },
 })
+
+function useOnThemeChange(props: ModalProps) {
+  const cancelColor = ref(props.cancelColor)
+
+  const _onThemeChange = ({ theme }: { theme: UniApp.ThemeMode }) => {
+    setCancelColor(theme, cancelColor)
+  }
+
+  watchEffect(() => {
+    if (props.visible) {
+      cancelColor.value = props.cancelColor
+      // #000 by default in protocols
+      if (props.cancelColor === '#000') {
+        if (getTheme() === 'dark') _onThemeChange({ theme: 'dark' })
+        onThemeChange(_onThemeChange)
+      }
+    } else {
+      offThemeChange(_onThemeChange)
+    }
+  })
+
+  return cancelColor
+}

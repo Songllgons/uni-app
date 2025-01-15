@@ -1,21 +1,23 @@
-import {
-  Literal,
+import type {
+  AssignmentExpression,
   BaseNode,
-  Property,
-  Identifier,
   CallExpression,
+  ExportSpecifier,
+  Identifier,
+  Literal,
   MemberExpression,
   MethodDefinition,
-  ExportSpecifier,
+  Property,
 } from 'estree'
 
 import {
-  Node,
-  TextModes,
+  type AttributeNode,
+  type CompoundExpressionNode,
+  type DirectiveNode,
+  type ElementNode,
+  type Node,
   NodeTypes,
-  ElementNode,
-  DirectiveNode,
-  SimpleExpressionNode,
+  type SimpleExpressionNode,
 } from '@vue/compiler-core'
 import { parse } from '@vue/compiler-dom'
 
@@ -24,6 +26,10 @@ export const isProperty = (node: BaseNode): node is Property =>
 
 export const isIdentifier = (node: BaseNode): node is Identifier =>
   node.type === 'Identifier'
+
+export const isAssignmentExpression = (
+  node: BaseNode
+): node is AssignmentExpression => node.type === 'AssignmentExpression'
 
 export const isCallExpression = (node: BaseNode): node is CallExpression =>
   node.type === 'CallExpression'
@@ -82,8 +88,8 @@ export function parseVue(code: string, errors: SyntaxError[]) {
   return parse(code, {
     isNativeTag: () => true,
     isPreTag: () => true,
-    getTextMode: () => TextModes.DATA,
-    onError: (e) => {
+    parseMode: 'sfc',
+    onError: (e: any) => {
       errors.push(e)
     },
   })
@@ -91,6 +97,10 @@ export function parseVue(code: string, errors: SyntaxError[]) {
 
 export function isElementNode(node: Node): node is ElementNode {
   return node.type === NodeTypes.ELEMENT
+}
+
+export function isAttributeNode(node: Node): node is AttributeNode {
+  return node.type === NodeTypes.ATTRIBUTE
 }
 
 export function isDirectiveNode(node: Node): node is DirectiveNode {
@@ -101,4 +111,10 @@ export function isSimpleExpressionNode(
   node: Node
 ): node is SimpleExpressionNode {
   return node.type === NodeTypes.SIMPLE_EXPRESSION
+}
+
+export function isCompoundExpressionNode(
+  node: Node
+): node is CompoundExpressionNode {
+  return node.type === NodeTypes.COMPOUND_EXPRESSION
 }

@@ -1,29 +1,33 @@
 import {
-  withModifiers,
-  Ref,
-  ref,
-  reactive,
+  type ExtractPropTypes,
+  type Ref,
   computed,
-  watch,
-  onMounted,
-  renderList,
   onBeforeUnmount,
+  onMounted,
+  reactive,
+  ref,
+  renderList,
+  watch,
+  withModifiers,
 } from 'vue'
+import { isArray } from '@vue/shared'
 import { passive } from '@dcloudio/uni-shared'
-import { useI18n, initI18nVideoMsgsOnce } from '@dcloudio/uni-core'
+import { initI18nVideoMsgsOnce, useI18n } from '@dcloudio/uni-core'
 import { getRealPath } from '@dcloudio/uni-platform'
 import {
+  type CustomEventTrigger,
+  type EmitEvent,
+  UniElement,
   defineBuiltInComponent,
-  useContextInfo,
-  useSubscribe,
-  useCustomEvent,
-  EmitEvent,
-  CustomEventTrigger,
-  useUserAction,
   useAttrs,
+  useContextInfo,
+  useCustomEvent,
+  useSubscribe,
+  useUserAction,
 } from '@dcloudio/uni-components'
 
 type UserActionState = ReturnType<typeof useUserAction>['state']
+type HTMLRef = Ref<HTMLElement | null>
 
 function formatTime(val: number): string {
   val = val > 0 && val < Infinity ? val : 0
@@ -284,14 +288,12 @@ interface VideoState {
   duration: number
   progress: number
   buffered: number
+  muted: boolean
 }
-function useVideo(
-  props: { src: string; initialTime: number | string },
-  attrs: Data,
-  trigger: CustomEventTrigger
-) {
+function useVideo(props: Props, attrs: Data, trigger: CustomEventTrigger) {
   const videoRef: Ref<HTMLVideoElement | null> = ref(null)
   const src = computed(() => getRealPath(props.src))
+  const muted = computed(() => props.muted === 'true' || props.muted === true)
   const state: VideoState = reactive({
     start: false,
     src,
@@ -300,6 +302,7 @@ function useVideo(
     duration: 0,
     progress: 0,
     buffered: 0,
+    muted,
   })
   watch(
     () => src.value,
@@ -314,6 +317,13 @@ function useVideo(
       trigger('progress', {} as Event, {
         buffered,
       })
+    }
+  )
+  watch(
+    () => muted.value,
+    (muted) => {
+      const video = videoRef.value as HTMLVideoElement
+      video.muted = muted
     }
   )
   function onDurationChange({ target }: Event) {
@@ -392,6 +402,10 @@ function useVideo(
       video.currentTime = position
     }
   }
+  function stop() {
+    seek(0)
+    pause()
+  }
   function playbackRate(rate: number) {
     const video = videoRef.value as HTMLVideoElement
     video.playbackRate = rate
@@ -401,6 +415,7 @@ function useVideo(
     state,
     play,
     pause,
+    stop,
     seek,
     playbackRate,
     toggle,
@@ -444,10 +459,10 @@ function useControls(
     controlsShow,
     controlsVisible,
   })
-  function clickProgress(event: MouseEvent) {
+  function clickProgress(event: Event) {
     const $progress = progressRef.value as HTMLElement
     let element = event.target as HTMLElement
-    let x = event.offsetX
+    let x = (event as MouseEvent).offsetX
     while (element && element !== $progress) {
       x += element.offsetLeft
       element = element.parentNode as HTMLElement
@@ -462,7 +477,7 @@ function useControls(
   function toggleControls() {
     state.controlsVisible = !state.controlsVisible
   }
-  let hideTiming: number | null
+  let hideTiming: ReturnType<typeof setTimeout> | null
   function autoHideStart() {
     hideTiming = setTimeout(() => {
       state.controlsVisible = false
@@ -571,6 +586,12 @@ function useControls(
   }
 }
 
+interface Danmu {
+  text: string
+  color?: string
+  time?: number
+}
+
 function useDanmu(
   props: { enableDanmu: any; danmuList: any[] },
   videoState: VideoState
@@ -583,12 +604,7 @@ function useDanmu(
     time: 0,
     index: -1,
   }
-  interface Danmu {
-    text: string
-    color?: string
-    time?: number
-  }
-  const danmuList: Danmu[] = Array.isArray(props.danmuList)
+  const danmuList: Danmu[] = isArray(props.danmuList)
     ? JSON.parse(JSON.stringify(props.danmuList))
     : []
   danmuList.sort(function (a: Danmu, b: Danmu) {
@@ -669,6 +685,7 @@ function useDanmu(
 function useContext(
   play: Function,
   pause: Function,
+  stop: Function,
   seek: Function,
   sendDanmu: Function,
   playbackRate: Function,
@@ -677,6 +694,7 @@ function useContext(
 ) {
   const methods = {
     play,
+    stop,
     pause,
     seek,
     sendDanmu,
@@ -792,6 +810,11 @@ const props = {
     default: true,
   },
 }
+
+type Props = ExtractPropTypes<typeof props>
+// 仅作实现，X项目中不会依据此类生成d.ts
+export class UniVideoElement extends UniElement {}
+
 export default /*#__PURE__*/ defineBuiltInComponent({
   name: 'Video',
   props,
@@ -806,8 +829,14 @@ export default /*#__PURE__*/ defineBuiltInComponent({
     'ended',
     'timeupdate',
   ],
+  //#if _X_ && !_NODE_JS_
+  rootElement: {
+    name: 'uni-video',
+    class: UniVideoElement,
+  },
+  //#endif
   setup(props, { emit, attrs, slots }) {
-    const rootRef = ref(null)
+    const rootRef: HTMLRef = ref(null)
     const containerRef = ref(null)
     const trigger = useCustomEvent<EmitEvent<typeof emit>>(rootRef, emit)
     const { state: userActionState } = useUserAction()
@@ -821,6 +850,7 @@ export default /*#__PURE__*/ defineBuiltInComponent({
       state: videoState,
       play,
       pause,
+      stop,
       seek,
       playbackRate,
       toggle,
@@ -865,6 +895,7 @@ export default /*#__PURE__*/ defineBuiltInComponent({
     useContext(
       play,
       pause,
+      stop,
       seek,
       sendDanmu,
       playbackRate,
@@ -872,16 +903,33 @@ export default /*#__PURE__*/ defineBuiltInComponent({
       exitFullScreen
     )
 
+    //#if _X_ && !_NODE_JS_
+    onMounted(() => {
+      const rootElement = rootRef.value as UniVideoElement
+      Object.assign(rootElement, {
+        play,
+        pause,
+        stop,
+        seek,
+        sendDanmu,
+        playbackRate,
+        requestFullScreen,
+        exitFullScreen,
+      })
+      rootElement.attachVmProps(props)
+    })
+    //#endif
+
     return () => {
       return (
-        <uni-video ref={rootRef} id={props.id}>
+        <uni-video ref={rootRef} id={props.id} onClick={toggleControls}>
           <div
             ref={containerRef}
             class="uni-video-container"
             onTouchstart={onTouchstart}
             onTouchend={onTouchend}
             onTouchmove={onTouchmove}
-            // @ts-ignore
+            // @ts-expect-error
             onFullscreenchange={withModifiers(onFullscreenChange, ['stop'])}
             onWebkitfullscreenchange={withModifiers(
               ($event: Event) => onFullscreenChange($event, true),
@@ -890,7 +938,6 @@ export default /*#__PURE__*/ defineBuiltInComponent({
           >
             <video
               ref={videoRef}
-              // @ts-ignore
               style={{ 'object-fit': props.objectFit }}
               muted={!!props.muted}
               loop={!!props.loop}
@@ -901,7 +948,6 @@ export default /*#__PURE__*/ defineBuiltInComponent({
               class="uni-video-video"
               webkit-playsinline
               playsinline
-              onClick={toggleControls}
               onDurationchange={onDurationChange}
               onLoadedmetadata={onLoadedMetadata}
               onProgress={onProgress}
@@ -934,13 +980,14 @@ export default /*#__PURE__*/ defineBuiltInComponent({
                   }}
                   onClick={withModifiers(toggle, ['stop'])}
                 />
-                <div class="uni-video-current-time">
+                <div class="uni-video-current-time" v-show={props.showProgress}>
                   {formatTime(videoState.currentTime)}
                 </div>
                 <div
                   ref={progressRef}
                   class="uni-video-progress-container"
                   onClick={withModifiers(clickProgress, ['stop'])}
+                  v-show={props.showProgress}
                 >
                   <div class="uni-video-progress">
                     <div
@@ -956,7 +1003,7 @@ export default /*#__PURE__*/ defineBuiltInComponent({
                     </div>
                   </div>
                 </div>
-                <div class="uni-video-duration">
+                <div class="uni-video-duration" v-show={props.showProgress}>
                   {formatTime(Number(props.duration) || videoState.duration)}
                 </div>
               </div>

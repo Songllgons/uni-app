@@ -1,6 +1,6 @@
 {
   "name": "@dcloudio/uni-app",
-  "version": "3.0.0-alpha-3021020211012005",
+  "version": "3.0.0-alpha-4040120241205001",
   "description": "@dcloudio/uni-app",
   "main": "./dist/uni-app.cjs.js",
   "module": "./dist/uni-app.es.js",
@@ -18,5 +18,22 @@
   "bugs": {
     "url": "https://github.com/dcloudio/uni-app/issues"
   },
-  "gitHead": "1efa8efd0a9eddeabdba75c020d015ebf31b8177"
+  "gitHead": "33e807d66e1fe47e2ee08ad9c59247e37b8884da",
+  "uni-app": {
+    "name": "uni-app",
+    "main": "dist/uni.compiler.js"
+  },
+  "dependencies": {
+    "@dcloudio/uni-cloud": "workspace:*",
+    "@dcloudio/uni-components": "workspace:*",
+    "@dcloudio/uni-console": "workspace:*",
+    "@dcloudio/uni-i18n": "workspace:*",
+    "@dcloudio/uni-push": "workspace:*",
+    "@dcloudio/uni-shared": "workspace:*",
+    "@dcloudio/uni-stat": "workspace:*",
+    "@vue/shared": "3.4.21"
+  },
+  "peerDependencies": {
+    "@dcloudio/types": "^3.4.14"
+  }
 }

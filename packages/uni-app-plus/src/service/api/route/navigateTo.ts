@@ -2,24 +2,23 @@ import { EventChannel, ON_HIDE, parseUrl } from '@dcloudio/uni-shared'
 import { getRouteMeta, invokeHook } from '@dcloudio/uni-core'
 import {
   API_NAVIGATE_TO,
-  API_TYPE_NAVIGATE_TO,
-  defineAsyncApi,
-  DefineAsyncApiFn,
+  type API_TYPE_NAVIGATE_TO,
+  type DefineAsyncApiFn,
   NavigateToOptions,
   NavigateToProtocol,
+  defineAsyncApi,
 } from '@dcloudio/uni-api'
 
 import { ANI_DURATION, ANI_SHOW } from '../../constants'
-import { navigate, RouteOptions } from './utils'
+import { type RouteOptions, navigate } from './utils'
 import { showWebview } from './webview'
 import { registerPage } from '../../framework/page'
 import { getWebviewId } from '../../framework/webview/utils'
 import { setStatusBarStyle } from '../../statusBar'
 
-export const $navigateTo: DefineAsyncApiFn<API_TYPE_NAVIGATE_TO> = (
-  args,
-  { resolve, reject }
-) => {
+export const $navigateTo: DefineAsyncApiFn<
+  API_TYPE_NAVIGATE_TO
+> = /*#__PURE__*/ (args, { resolve, reject }) => {
   const { url, events, animationType, animationDuration } = args
   const { path, query } = parseUrl(url)
   const [aniType, aniDuration] = initAnimation(
@@ -45,7 +44,7 @@ export const $navigateTo: DefineAsyncApiFn<API_TYPE_NAVIGATE_TO> = (
   )
 }
 
-export const navigateTo = defineAsyncApi<API_TYPE_NAVIGATE_TO>(
+export const navigateTo = /*#__PURE__*/ defineAsyncApi<API_TYPE_NAVIGATE_TO>(
   API_NAVIGATE_TO,
   $navigateTo,
   NavigateToProtocol,
@@ -82,7 +81,7 @@ function _navigateTo({
   })
 }
 
-function initAnimation(
+export function initAnimation(
   path: string,
   animationType?: string,
   animationDuration?: number

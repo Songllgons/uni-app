@@ -1,6 +1,7 @@
-import { ComponentPublicInstance } from 'vue'
+import type { ComponentPublicInstance } from 'vue'
 import { getRealRoute } from '@dcloudio/uni-core'
-import { DATA_RE, SCHEME_RE } from '@dcloudio/uni-shared'
+import { DATA_RE, SCHEME_RE, addLeadingSlash } from '@dcloudio/uni-shared'
+import { getCurrentBasePages, getPage$BasePage } from '../framework/setup/page'
 declare global {
   interface ImportMeta {
     env: {
@@ -17,25 +18,34 @@ export function findElem(vm: ComponentPublicInstance) {
   return vm.$el
 }
 
-const baseUrl = __IMPORT_META_ENV_BASE_URL__
+// const baseUrl = __IMPORT_META_ENV_BASE_URL__
 function addBase(filePath: string) {
+  const { base: baseUrl } = __uniConfig.router!
   // filepath可能已经被补充了baseUrl
-  if (('/' + filePath).indexOf(baseUrl) === 0) {
-    return '/' + filePath
+  if (addLeadingSlash(filePath).indexOf(baseUrl) === 0) {
+    return addLeadingSlash(filePath)
   }
   return baseUrl + filePath
 }
 
 export function getRealPath(filePath: string) {
   // 相对路径模式对静态资源路径特殊处理
-  if (__uniConfig.router!.base === './') {
-    filePath = filePath.replace(/^\.\/static\//, '/static/')
+  const { base, assets } = __uniConfig.router!
+  if (base === './') {
+    // 如果包含static目录（根目录的static|分包的static|uni_modules的static）或者 assets 目录开头
+    if (
+      filePath.indexOf('./') === 0 &&
+      (filePath.includes('/static/') ||
+        filePath.indexOf('./' + (assets || 'assets') + '/') === 0)
+    ) {
+      filePath = filePath.slice(1)
+    }
   }
   if (filePath.indexOf('/') === 0) {
     if (filePath.indexOf('//') === 0) {
       filePath = 'https:' + filePath
     } else {
-      return addBase(filePath.substr(1))
+      return addBase(filePath.slice(1))
     }
   }
   // 网络资源或base64
@@ -46,11 +56,22 @@ export function getRealPath(filePath: string) {
   ) {
     return filePath
   }
-
-  const pages = getCurrentPages()
+  if (__X__) {
+    // 开发模式下 vite 会读取原始文件路径，此时用正确的字符串相对路径可以正常访问到，但发行后是不能被访问到的，因为此类资源不会被拷贝
+    // 开发模式下非static的静态资源路径不解析，确保加载不到，与发行模式保持一致
+    if (__DEV__) {
+      if (!filePath.includes('/static/')) {
+        return filePath
+      }
+    }
+  }
+  const pages = getCurrentBasePages()
   if (pages.length) {
     return addBase(
-      getRealRoute(pages[pages.length - 1].$page.route, filePath).substr(1)
+      getRealRoute(
+        getPage$BasePage(pages[pages.length - 1]).route,
+        filePath
+      ).slice(1)
     )
   }
 

@@ -13,6 +13,9 @@ export function getNVueCompiler(manifestJson: Record<string, any>) {
     if (nvueCompiler === 'vue') {
       return 'vue'
     }
+    if (nvueCompiler === 'vite') {
+      return 'vite'
+    }
   }
   return 'uni-app'
 }
@@ -27,15 +30,18 @@ export function getNVueStyleCompiler(manifestJson: Record<string, any>) {
 
 const flexDirs = ['row', 'row-reverse', 'column', 'column-reverse'] as const
 
-type FlexDir = typeof flexDirs[number]
+type FlexDir = (typeof flexDirs)[number]
 
 export function getNVueFlexDirection(manifestJson: Record<string, any>) {
   let flexDir: FlexDir = 'column'
-  if (manifestJson['app-plus']?.nvue?.['flex-direction']) {
-    flexDir = manifestJson['app-plus'].nvue['flex-direction'] as FlexDir
-    if (flexDirs.indexOf(flexDir) === -1) {
-      flexDir = 'column'
-    }
+  const appPlusJson = manifestJson['app-plus'] || manifestJson['plus']
+
+  if (
+    appPlusJson?.nvue?.['flex-direction'] &&
+    flexDirs.includes(appPlusJson?.nvue?.['flex-direction'])
+  ) {
+    flexDir = appPlusJson.nvue['flex-direction'] as FlexDir
   }
+
   return flexDir
 }

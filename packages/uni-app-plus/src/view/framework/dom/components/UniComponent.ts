@@ -1,34 +1,36 @@
 import { hasOwn, isPlainObject } from '@vue/shared'
 import {
-  App,
-  Component,
-  ComponentInternalInstance,
+  type App,
+  type Component,
+  type ComponentInternalInstance,
   createApp,
-  reactive,
   // @ts-expect-error
   flushPostFlushCbs,
+  reactive,
 } from 'vue'
 import {
   ATTR_STYLE,
   ATTR_V_OWNER_ID,
   ATTR_V_RENDERJS,
   ATTR_V_SHOW,
+  type UniNodeJSON,
   formatLog,
   parseEventName,
-  UniNodeJSON,
 } from '@dcloudio/uni-shared'
 import { UniNode } from '../elements/UniNode'
 import { createInvoker, createWxsEventInvoker } from '../modules/events'
-import { createWrapper, UniCustomElement } from '.'
-import { $, removeElement } from '../page'
+import type { UniCustomElement } from '.'
+import { createWrapper } from '../createWrapper'
+import { $, removeElement } from '../store'
 import {
   JOB_PRIORITY_REBUILD,
   JOB_PRIORITY_RENDERJS,
   queuePostActionJob,
 } from '../scheduler'
-import { decodeAttr } from '../utils'
-import { patchVShow, VShowElement } from '../directives/vShow'
+import { decodeAttr, isCssVar } from '../utils'
+import { type VShowElement, patchVShow } from '../directives/vShow'
 import { initRenderjs } from '../renderjs'
+import { normalizeStyleValue } from '../../../utils'
 
 export class UniComponent extends UniNode {
   declare $: UniCustomElement
@@ -52,6 +54,7 @@ export class UniComponent extends UniNode {
     this.$app = createApp(createWrapper(component, this.$props))
     this.$app.mount(container)
     this.$ = container.firstElementChild! as UniCustomElement
+    this.$.__id = id
     if (selector) {
       this.$holder = this.$.querySelector(selector)!
       if (__DEV__) {
@@ -71,7 +74,7 @@ export class UniComponent extends UniNode {
     // 延迟到insert之后，再flush，确保mounted等生命周期触发正常
     flushPostFlushCbs()
   }
-  init(nodeJson: Partial<UniNodeJSON>) {
+  init(nodeJson: Partial<UniNodeJSON>, isCreate: boolean = true) {
     const { a, e, w } = nodeJson
     if (a) {
       // 初始化时，先提取 wxsProps，再 setAttr
@@ -94,9 +97,11 @@ export class UniComponent extends UniNode {
   }
   setText(text: string) {
     ;(this.$holder || this.$).textContent = text
+    this.updateView()
   }
   addWxsEvent(name: string, wxsEvent: string, flag: number) {
-    this.$props[name] = createWxsEventInvoker(this.$, wxsEvent, flag)
+    // 此时 $ 还不存在，故传入 this，等事件触发时，再获取 $
+    this.$props[name] = createWxsEventInvoker(this, wxsEvent, flag)
   }
   addEvent(name: string, value: number) {
     this.$props[name] = createInvoker(this.id, value, parseEventName(name)[1])
@@ -119,7 +124,7 @@ export class UniComponent extends UniNode {
         JOB_PRIORITY_RENDERJS
       )
     } else if (name === ATTR_STYLE) {
-      const newStyle = decodeAttr(this.$ || $(this.pid).$, value)
+      const newStyle = decodeAttr(value, this.$ || $(this.pid).$)
       const oldStyle = this.$props.style
       if (isPlainObject(newStyle) && isPlainObject(oldStyle)) {
         Object.keys(newStyle).forEach((n) => {
@@ -128,27 +133,44 @@ export class UniComponent extends UniNode {
       } else {
         this.$props.style = newStyle
       }
+    } else if (isCssVar(name)) {
+      this.$.style.setProperty(name, normalizeStyleValue(value as string))
     } else {
-      value = decodeAttr(this.$ || $(this.pid).$, value)
+      value = decodeAttr(value, this.$ || $(this.pid).$)
       if (!this.wxsPropsInvoke(name, value, true)) {
         this.$props[name] = value
       }
     }
+    this.updateView()
   }
   removeAttr(name: string) {
-    this.$props[name] = null
+    if (isCssVar(name)) {
+      this.$.style.removeProperty(name)
+    } else {
+      this.$props[name] = null
+    }
+    this.updateView()
   }
 
   remove() {
+    this.removeUniParent()
     this.isUnmounted = true
     this.$app.unmount()
     removeElement(this.id)
+    this.removeUniChildren()
+    // 同步触发生命周期
+    flushPostFlushCbs()
+    this.updateView()
   }
   appendChild(node: Element) {
-    return (this.$holder || this.$).appendChild(node)
+    const res = (this.$holder || this.$).appendChild(node)
+    this.updateView(true)
+    return res
   }
   insertBefore(newChild: Node, refChild: Node) {
-    return (this.$holder || this.$).insertBefore(newChild, refChild)
+    const res = (this.$holder || this.$).insertBefore(newChild, refChild)
+    this.updateView(true)
+    return res
   }
 }
 
@@ -182,6 +204,10 @@ export class UniContainerComponent extends UniComponent {
   insertBefore(newChild: Node, refChild: Node) {
     queuePostActionJob(this.getRebuildFn(), JOB_PRIORITY_REBUILD)
     return super.insertBefore(newChild, refChild)
+  }
+  removeUniChild(node: UniNode) {
+    queuePostActionJob(this.getRebuildFn(), JOB_PRIORITY_REBUILD)
+    return super.removeUniChild(node)
   }
   rebuild() {
     // 刷新容器组件状态
@@ -223,4 +249,16 @@ export function setHolderText(holder: Element, clazz: string, text: string) {
   })
   // 添加文本节点
   holder.appendChild(document.createTextNode(text))
+}
+
+const vModelNames = ['value', 'modelValue']
+export function initVModel(props: Record<string, any>) {
+  vModelNames.forEach((name) => {
+    if (hasOwn(props, name)) {
+      const event = 'onUpdate:' + name
+      if (!hasOwn(props, event)) {
+        props[event] = (v: string) => (props[name] = v)
+      }
+    }
+  })
 }

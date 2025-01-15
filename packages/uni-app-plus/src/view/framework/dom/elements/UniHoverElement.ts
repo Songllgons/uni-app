@@ -1,4 +1,4 @@
-import { formatLog, UniNodeJSON } from '@dcloudio/uni-shared'
+import { type UniNodeJSON, formatLog } from '@dcloudio/uni-shared'
 import { UniAnimationElement } from './UniAnimationElement'
 
 interface HoverProps {
@@ -75,11 +75,12 @@ class Hover {
 
   set hovering(hovering: boolean) {
     this._hovering = hovering
-    const hoverClass = this.props['hover-class']
+    const hoverClass = this.props['hover-class'].split(' ').filter(Boolean)
+    const ClassList = this.$.classList
     if (hovering) {
-      this.$.classList.add(hoverClass)
+      this.$.classList.add.apply(ClassList, hoverClass)
     } else {
-      this.$.classList.remove(hoverClass)
+      this.$.classList.remove.apply(ClassList, hoverClass)
     }
   }
 

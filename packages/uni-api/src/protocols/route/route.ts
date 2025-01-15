@@ -92,6 +92,12 @@ export const NavigateBackOptions: ApiOptions<API_TYPE_NAVIGATE_BACK> = {
   },
 }
 
+export const PreloadPageOptions: ApiOptions<API_TYPE_PRELOAD_PAGE> =
+  /*#__PURE__*/ createRouteOptions(API_PRELOAD_PAGE)
+
+export const UnPreloadPageOptions: ApiOptions<API_TYPE_UN_PRELOAD_PAGE> =
+  /*#__PURE__*/ createRouteOptions(API_UN_PRELOAD_PAGE)
+
 function createAnimationProtocol(animationTypes: string[]) {
   return {
     animationType: {
@@ -116,7 +122,7 @@ function createAnimationProtocol(animationTypes: string[]) {
 
 let navigatorLock: string
 
-function beforeRoute() {
+export function beforeRoute() {
   navigatorLock = ''
 }
 
@@ -129,7 +135,7 @@ function createRouteOptions(type: string): ApiOptions<API_TYPE_NAVIGATE_TO> {
   }
 }
 
-function createNormalizeUrl(type: string) {
+export function createNormalizeUrl(type: string) {
   return function normalizeUrl(url: string, params: Record<string, any>) {
     if (!url) {
       return `Missing required args: "url"`
@@ -181,7 +187,7 @@ function createNormalizeUrl(type: string) {
       }
       if (routeOptions.meta.isTabBar) {
         const pages = getCurrentPages()
-        const tabBarPagePath = routeOptions.path.substr(1)
+        const tabBarPagePath = routeOptions.path.slice(1)
         if (pages.find((page) => page.route === tabBarPagePath)) {
           return 'tabBar page `' + tabBarPagePath + '` already exists'
         }

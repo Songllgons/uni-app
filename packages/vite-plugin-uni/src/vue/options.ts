@@ -1,38 +1,43 @@
-import { extend, hasOwn, isArray, isPlainObject } from '@vue/shared'
-import { SFCTemplateCompileOptions, TemplateCompiler } from '@vue/compiler-sfc'
-import { isCustomElement } from '@dcloudio/uni-shared'
+import fsExtra from 'fs-extra'
+import { hasOwn, isArray, isPlainObject } from '@vue/shared'
+import type { Plugin } from 'vite'
+import type {
+  AssetURLOptions,
+  SFCStyleCompileOptions,
+  TemplateCompiler,
+} from '@vue/compiler-sfc'
+import type { Options as VueOptions } from '@vitejs/plugin-vue'
 import {
   EXTNAME_VUE_RE,
-  UniVitePlugin,
+  type UniVitePlugin,
+  createUniVueTransformAssetUrls,
+  getBaseNodeTransforms,
+  isExternalUrl,
+  normalizePath,
+  preJs,
   uniPostcssScopedPlugin,
 } from '@dcloudio/uni-cli-shared'
 
-import { VitePluginUniResolvedOptions } from '..'
-import { transformMatchMedia } from './transforms/transformMatchMedia'
-import { createTransformEvent } from './transforms/transformEvent'
-// import { transformContext } from './transforms/transformContext'
+import type { ViteLegacyOptions, VitePluginUniResolvedOptions } from '..'
+import { createNVueCompiler } from '../utils'
+import { resolveUniTypeScript } from '@dcloudio/uni-cli-shared'
 
-function createUniVueTransformAssetUrls(
-  base: string
-): SFCTemplateCompileOptions['transformAssetUrls'] {
-  return {
-    base,
-    tags: {
-      audio: ['src'],
-      video: ['src', 'poster'],
-      img: ['src'],
-      image: ['src'],
-      'cover-image': ['src'],
-      // h5
-      'v-uni-audio': ['src'],
-      'v-uni-video': ['src', 'poster'],
-      'v-uni-image': ['src'],
-      'v-uni-cover-image': ['src'],
-      // nvue
-      'u-image': ['src'],
-      'u-video': ['src', 'poster'],
-    },
+const pluginVuePath = require.resolve('@vitejs/plugin-vue')
+const normalizedPluginVuePath = normalizePath(pluginVuePath)
+/**
+ * 每次创建新的 plugin-vue 实例。因为该插件内部会 cache  descriptor，而相同的vue文件在编译到vue页面和nvue页面时，不能共享缓存（条件编译，css scoped等均不同）
+ * @returns
+ */
+export function createPluginVueInstance(options: VueOptions) {
+  delete require.cache[pluginVuePath]
+  delete require.cache[normalizedPluginVuePath]
+  const vuePlugin = require('@vitejs/plugin-vue')
+  const vuePluginInstance: Plugin = vuePlugin(options)
+  if (process.env.NODE_ENV === 'development') {
+    // 删除 buildEnd 逻辑，因为里边清理了缓存，导致 watch 模式失效 https://github.com/vitejs/vite-plugin-vue/commit/96dbb220ff210d2f7391f43a807bcd8cfb0da776
+    delete vuePluginInstance.buildEnd
   }
+  return vuePluginInstance
 }
 
 export function initPluginVueOptions(
@@ -45,6 +50,9 @@ export function initPluginVueOptions(
   }
 ) {
   const vueOptions = options.vueOptions || (options.vueOptions = {})
+  // if (!hasOwn(vueOptions, 'reactivityTransform')) {
+  //   vueOptions.reactivityTransform = true
+  // }
   if (!vueOptions.include) {
     vueOptions.include = []
   }
@@ -53,7 +61,8 @@ export function initPluginVueOptions(
   }
   vueOptions.include.push(EXTNAME_VUE_RE)
 
-  const styleOptions = vueOptions.style || (vueOptions.style = {})
+  const styleOptions: Partial<SFCStyleCompileOptions> =
+    vueOptions.style || (vueOptions.style = {})
   if (!styleOptions.postcssPlugins) {
     styleOptions.postcssPlugins = []
   }
@@ -62,41 +71,104 @@ export function initPluginVueOptions(
 
   const templateOptions = vueOptions.template || (vueOptions.template = {})
 
-  templateOptions.transformAssetUrls = createUniVueTransformAssetUrls(
-    options.base
-  )
-
   const compilerOptions =
     templateOptions.compilerOptions || (templateOptions.compilerOptions = {})
 
+  ;(compilerOptions as any).isX = process.env.UNI_APP_X === 'true'
+
   const {
     compiler,
+    styleOptions: { postcssPlugins },
     compilerOptions: {
       miniProgram,
       isNativeTag,
       isCustomElement,
       nodeTransforms,
       directiveTransforms,
+      whitespace,
     },
   } = uniPluginOptions
+
+  if (postcssPlugins) {
+    styleOptions.postcssPlugins.push(...postcssPlugins)
+  }
+
   if (compiler) {
     templateOptions.compiler = compiler
   }
   if (miniProgram) {
     ;(compilerOptions as any).miniProgram = miniProgram
   }
-  compilerOptions.isNativeTag = isNativeTag
-  compilerOptions.isCustomElement = isCustomElement
-  if (directiveTransforms) {
-    compilerOptions.directiveTransforms = extend(
-      compilerOptions.directiveTransforms || {},
-      directiveTransforms
-    )
+
+  if (isNativeTag) {
+    const userIsNativeTag = compilerOptions.isNativeTag
+    compilerOptions.isNativeTag = (tag) => {
+      if (isNativeTag(tag)) {
+        return true
+      }
+      if (userIsNativeTag && userIsNativeTag(tag)) {
+        return true
+      }
+      return false
+    }
+  }
+
+  if (whitespace) {
+    compilerOptions.whitespace = whitespace
+  }
+
+  if (isCustomElement) {
+    const userIsCustomElement = compilerOptions.isCustomElement
+    compilerOptions.isCustomElement = (tag) => {
+      if (isCustomElement(tag)) {
+        return true
+      }
+      if (userIsCustomElement && userIsCustomElement(tag)) {
+        return true
+      }
+      return false
+    }
+  }
+
+  compilerOptions.directiveTransforms = {
+    ...compilerOptions.directiveTransforms,
+    ...directiveTransforms,
   }
 
   if (!compilerOptions.nodeTransforms) {
     compilerOptions.nodeTransforms = []
   }
+  // 合并 transformAssetUrls
+
+  // 内置配置
+  const builtInTransformAssetUrls: AssetURLOptions =
+    createUniVueTransformAssetUrls(
+      isExternalUrl(options.base) ? options.base : ''
+    )
+
+  // 用户传递配置 eg: transformAssetUrls.tags = {'my-image': ['src']}
+  // docs: https://github.com/vitejs/vite-plugin-vue/tree/main/packages/plugin-vue
+  const userOptionsTransformAssetUrls = templateOptions.transformAssetUrls
+
+  templateOptions.transformAssetUrls = builtInTransformAssetUrls
+  if (
+    typeof userOptionsTransformAssetUrls !== 'boolean' &&
+    !!userOptionsTransformAssetUrls?.tags &&
+    !Array.isArray(userOptionsTransformAssetUrls.tags)
+  ) {
+    templateOptions.transformAssetUrls = {
+      ...builtInTransformAssetUrls,
+      ...userOptionsTransformAssetUrls,
+      tags: {
+        ...builtInTransformAssetUrls.tags,
+        ...userOptionsTransformAssetUrls.tags,
+      },
+    }
+  }
+  if (options.platform !== 'h5' && options.platform !== 'web') {
+    compilerOptions.nodeTransforms.push(...getBaseNodeTransforms(options.base))
+  }
+
   if (nodeTransforms) {
     compilerOptions.nodeTransforms.push(...nodeTransforms)
   }
@@ -108,37 +180,105 @@ export function initPluginVueOptions(
   //   compatConfig
   // )
 
-  const eventOpts = UniVitePlugins.reduce<Record<string, string>>(
-    (eventOpts, UniVitePlugin) => {
-      return extend(eventOpts, UniVitePlugin.uni?.transformEvent)
-    },
-    {}
-  )
-  // compilerOptions.nodeTransforms.unshift(transformContext)
-  compilerOptions.nodeTransforms.unshift(createTransformEvent(eventOpts))
-  if (options.platform !== 'mp-weixin') {
-    compilerOptions.nodeTransforms.unshift(transformMatchMedia)
-  }
-
   // App,MP 平台不支持使用静态节点
   compilerOptions.hoistStatic = false
+  // 小程序使用了
+  ;(compilerOptions as any).root = process.env.UNI_INPUT_DIR
+  const isX = process.env.UNI_APP_X === 'true'
+  // app-nvue | app-uvue 需要启用 customElement 机制来内联 styles
+  if (
+    process.env.UNI_COMPILER === 'nvue' ||
+    (isX && (options.platform === 'app' || options.platform === 'app-harmony'))
+  ) {
+    vueOptions.customElement = true
+    if (process.env.UNI_RENDERER_NATIVE !== 'appService' || isX) {
+      // nvue 需要使用自己的 compiler，来移除 scoped
+      vueOptions.compiler = createNVueCompiler()
+    }
+  }
+  if (!vueOptions.script) {
+    vueOptions.script = {}
+  }
+
+  // TODO 目前暂不支持通过@/开头引入文件，因为需要tsconfig.json配置，建议使用相对路径
+  // https://github.com/vuejs/core/blob/main/packages/compiler-sfc/src/script/resolveType.ts#L911
+  require('@vue/compiler-sfc').registerTS(() => {
+    if (isX) {
+      return resolveUniTypeScript()
+    }
+    return require('typescript')
+  })
+
+  if (!vueOptions.script.fs) {
+    function resolveFile(file: string) {
+      if (file.startsWith('@/')) {
+        file = file.replace('@/', normalizePath(process.env.UNI_INPUT_DIR))
+      }
+      return file
+    }
+    vueOptions.script.fs = {
+      fileExists(file) {
+        return fsExtra.existsSync(resolveFile(file))
+      },
+      readFile(file) {
+        // 需要走条件编译
+        return preJs(fsExtra.readFileSync(resolveFile(file), 'utf-8'))
+      },
+      realpath(file) {
+        return resolveFile(file)
+      },
+    }
+  }
+
+  if (isX) {
+    if (!vueOptions.script) {
+      vueOptions.script = {
+        babelParserPlugins: [],
+      }
+    }
+    if (!vueOptions.script.babelParserPlugins) {
+      vueOptions.script.babelParserPlugins = []
+    }
+
+    if (!vueOptions.script.babelParserPlugins.includes('typescript')) {
+      vueOptions.script.babelParserPlugins.push('typescript')
+    }
+    // decorators or decorators-legacy
+    if (!vueOptions.script.babelParserPlugins.includes('decorators')) {
+      vueOptions.script.babelParserPlugins.push('decorators')
+    }
+  }
+
   return vueOptions
 }
 
-export function initPluginVueJsxOptions(options: VitePluginUniResolvedOptions) {
+export function initPluginVueJsxOptions(
+  options: VitePluginUniResolvedOptions,
+  {
+    isCustomElement,
+  }: Required<Required<UniVitePlugin>['uni']>['compilerOptions'],
+  jsxOptions: Required<Required<UniVitePlugin>['uni']>['jsxOptions']
+) {
   const vueJsxOptions = isPlainObject(options.vueJsxOptions)
     ? options.vueJsxOptions
     : (options.vueJsxOptions = {})
   if (!hasOwn(vueJsxOptions, 'optimize')) {
     vueJsxOptions.optimize = true
   }
-  vueJsxOptions.isCustomElement = isCustomElement
+  vueJsxOptions.isCustomElement = isCustomElement as (tag: string) => boolean
+  if (!vueJsxOptions.babelPlugins) {
+    vueJsxOptions.babelPlugins = []
+  }
+  if (isArray(jsxOptions.babelPlugins)) {
+    vueJsxOptions.babelPlugins.push(...jsxOptions.babelPlugins)
+  }
+
   return vueJsxOptions
 }
 
 export function initPluginViteLegacyOptions(
   options: VitePluginUniResolvedOptions
-) {
+): ViteLegacyOptions {
   const viteLegacyOptions =
     options.viteLegacyOptions || (options.viteLegacyOptions = {})
   return viteLegacyOptions

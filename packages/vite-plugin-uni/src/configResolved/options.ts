@@ -1,17 +1,14 @@
-import fs from 'fs'
-import path from 'path'
-import { parse } from 'jsonc-parser'
-import { VitePluginUniResolvedOptions } from '..'
-import { ResolvedConfig } from 'vite'
+import type { VitePluginUniResolvedOptions } from '..'
+import type { ResolvedConfig } from 'vite'
+import {
+  getPlatformManifestJson,
+  parseManifestJsonOnce,
+} from '@dcloudio/uni-cli-shared'
 
 function resolveBase() {
-  const manifest = parse(
-    fs.readFileSync(
-      path.join(process.env.UNI_INPUT_DIR!, 'manifest.json'),
-      'utf8'
-    )
-  )
-  return (manifest.h5 && manifest.h5.router && manifest.h5.router.base) || '/'
+  const manifest = parseManifestJsonOnce(process.env.UNI_INPUT_DIR!)
+  const webManifest = getPlatformManifestJson(manifest, 'h5')
+  return (webManifest && webManifest.router && webManifest.router.base) || '/'
 }
 
 export function initOptions(

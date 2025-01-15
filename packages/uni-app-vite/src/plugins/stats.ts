@@ -1,4 +1,4 @@
-import { Plugin, ResolvedConfig } from 'vite'
+import type { Plugin, ResolvedConfig } from 'vite'
 import { hash } from '@dcloudio/uni-cli-shared'
 
 const emittedHashMap = new WeakMap<ResolvedConfig, Map<string, string>>()
@@ -6,7 +6,7 @@ const emittedHashMap = new WeakMap<ResolvedConfig, Map<string, string>>()
 export function uniStatsPlugin(): Plugin {
   let resolvedConfig: ResolvedConfig
   return {
-    name: 'vite:uni-app-stats',
+    name: 'uni:app-stats',
     enforce: 'post',
     configResolved(config) {
       resolvedConfig = config

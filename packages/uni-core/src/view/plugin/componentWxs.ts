@@ -1,7 +1,8 @@
-import { ComponentInternalInstance, ComponentPublicInstance } from 'vue'
+import type { ComponentInternalInstance, ComponentPublicInstance } from 'vue'
 import {
   isFunction,
   isPlainObject,
+  isString,
   parseStringStyle,
   stringifyStyle,
 } from '@vue/shared'
@@ -66,12 +67,12 @@ export class ComponentDescriptor {
     if (!this.$el || !selector) {
       return []
     }
-    const descriptors = []
+    const descriptors: ComponentDescriptor[] = []
     const els = this.$el.querySelectorAll(selector)
     for (let i = 0; i < els.length; i++) {
       const wxsVm = getWxsVm(els[i] as WxsElement)
       if (wxsVm) {
-        descriptors.push(createComponentDescriptor(wxsVm, false))
+        descriptors.push(createComponentDescriptor(wxsVm, false)!)
       }
     }
     return descriptors
@@ -112,7 +113,7 @@ export class ComponentDescriptor {
     if (!this.$el || !style) {
       return this
     }
-    if (typeof style === 'string') {
+    if (isString(style)) {
       style = parseStringStyle(style)
     }
     if (isPlainObject(style)) {
@@ -221,11 +222,10 @@ function createComponentDescriptor(
   vm: ComponentDescriptorVm,
   isOwnerInstance = true
 ) {
-  if (isOwnerInstance && vm) {
-    if (__PLATFORM__ === 'h5') {
+  if (__PLATFORM__ === 'h5') {
+    if (isOwnerInstance && vm) {
       vm = resolveOwnerVm((vm as ComponentPublicInstance).$)!
     }
-    // TODO App
   }
   if (vm && vm.$el) {
     if (!vm.$el.__wxsComponentDescriptor) {
@@ -244,9 +244,13 @@ export function getComponentDescriptor(
 
 function resolveOwnerComponentPublicInstance(
   eventValue: Function,
-  instance: ComponentInternalInstance | null
+  instance: ComponentInternalInstance | null,
+  checkArgsLength = true
 ) {
-  if (!instance || eventValue.length < 2) {
+  if (!instance) {
+    return false
+  }
+  if (checkArgsLength && eventValue.length < 2) {
     return false
   }
   const ownerVm = resolveOwnerVm(instance)
@@ -263,15 +267,23 @@ function resolveOwnerComponentPublicInstance(
 export function wrapperH5WxsEvent(
   event: Record<string, any>,
   eventValue?: Function,
-  instance?: ComponentInternalInstance | null
+  instance?: ComponentInternalInstance | null,
+  checkArgsLength = true
 ) {
   if (eventValue) {
-    Object.defineProperty(event, 'instance', {
-      get() {
-        return getComponentDescriptor(instance!.proxy!, false)
-      },
-    })
-    const ownerVm = resolveOwnerComponentPublicInstance(eventValue, instance!)
+    if (!event.__instance) {
+      event.__instance = true
+      Object.defineProperty(event, 'instance', {
+        get() {
+          return getComponentDescriptor(instance!.proxy!, false)
+        },
+      })
+    }
+    const ownerVm = resolveOwnerComponentPublicInstance(
+      eventValue,
+      instance!,
+      checkArgsLength
+    )
     if (ownerVm) {
       return [event, getComponentDescriptor(ownerVm, false)]
     }

@@ -1,18 +1,19 @@
 import {
   extend,
   hasOwn,
-  isString,
   isFunction,
   isPlainObject,
+  isString,
 } from '@vue/shared'
+
 import { validateProtocols } from '../protocol'
 import {
-  invokeCallback,
   createAsyncApiCallback,
-  onKeepAliveApiCallback,
-  offKeepAliveApiCallback,
-  findInvokeCallbackByName,
   createKeepAliveApiCallback,
+  findInvokeCallbackByName,
+  invokeCallback,
+  offKeepAliveApiCallback,
+  onKeepAliveApiCallback,
   removeKeepAliveApiCallback,
 } from './callback'
 import type { CALLBACK_TYPES } from './callback'
@@ -25,6 +26,7 @@ function formatApiArgs<T extends ApiLike>(
   const params = args[0]
   if (
     !options ||
+    !options.formatArgs ||
     (!isPlainObject(options.formatArgs) && isPlainObject(params))
   ) {
     return
@@ -49,14 +51,48 @@ function formatApiArgs<T extends ApiLike>(
 }
 
 function invokeSuccess(id: number, name: string, res: unknown) {
-  return invokeCallback(id, extend(res || {}, { errMsg: name + ':ok' }))
+  const result: { errSubject?: string; errMsg: string } = {
+    errMsg: name + ':ok',
+  }
+
+  if (__X__) {
+    result.errSubject = name
+  }
+
+  return invokeCallback(id, extend((res || {}) as Object, result))
 }
 
-function invokeFail(id: number, name: string, errMsg?: string, errRes?: any) {
-  return invokeCallback(
-    id,
-    extend({ errMsg: name + ':fail' + (errMsg ? ' ' + errMsg : '') }, errRes)
-  )
+function invokeFail(
+  id: number,
+  name: string,
+  errMsg?: string,
+  errRes: any = {}
+) {
+  const errMsgPrefix = name + ':fail'
+  let apiErrMsg = ''
+  if (!errMsg) {
+    apiErrMsg = errMsgPrefix
+  } else if (errMsg.indexOf(errMsgPrefix) === 0) {
+    apiErrMsg = errMsg
+  } else {
+    apiErrMsg = errMsgPrefix + ' ' + errMsg
+  }
+  if (!__X__) {
+    delete errRes.errCode
+  }
+
+  let res = extend({ errMsg: apiErrMsg }, errRes)
+
+  if (__X__) {
+    if (typeof UniError !== 'undefined') {
+      res =
+        typeof errRes.errCode !== 'undefined'
+          ? new UniError(name, errRes.errCode, apiErrMsg)
+          : new UniError(apiErrMsg, errRes)
+    }
+  }
+
+  return invokeCallback(id, res)
 }
 
 function beforeInvokeApi<T extends ApiLike>(
@@ -130,12 +166,18 @@ function wrapperOffApi<T extends ApiLike>(
   }
 }
 
-function normalizeErrMsg(errMsg: string | Error) {
+function parseErrMsg(errMsg?: string | Error) {
   if (!errMsg || isString(errMsg)) {
     return errMsg
   }
   if (errMsg.stack) {
-    console.error(errMsg.message + '\n' + errMsg.stack)
+    // 此处同时被鸿蒙arkts和jsvm使用，暂时使用运行时判断鸿蒙jsvm环境，注意此用法仅内部使用
+    if (
+      !__X__ &&
+      (typeof globalThis === 'undefined' || !(globalThis as any).harmonyChannel)
+    ) {
+      console.error(errMsg.message + '\n' + errMsg.stack)
+    }
     return errMsg.message
   }
   return errMsg as unknown as string
@@ -155,8 +197,8 @@ function wrapperTaskApi<T extends ApiLike>(
     }
     return fn(args, {
       resolve: (res: unknown) => invokeSuccess(id, name, res),
-      reject: (errMsg: string | Error, errRes?: any) =>
-        invokeFail(id, name, normalizeErrMsg(errMsg), errRes),
+      reject: (errMsg?: string | Error, errRes?: any) =>
+        invokeFail(id, name, parseErrMsg(errMsg), errRes),
     })
   }
 }
@@ -201,13 +243,16 @@ export function defineOffApi<T extends ApiLike>(
   return wrapperOffApi(name, fn, options) as unknown as T
 }
 
-export function defineTaskApi<T extends TaskApiLike, P = AsyncApiOptions<T>>(
+export function defineTaskApi<
+  T extends TaskApiLike,
+  P extends AsyncMethodOptionLike = AsyncApiOptions<T>
+>(
   name: string,
   fn: (
     args: Omit<P, CALLBACK_TYPES>,
     res: {
       resolve: (res?: AsyncApiRes<P> | void) => void
-      reject: (err?: string) => void
+      reject: <R extends object>(err?: string, errRes?: R & object) => void
     }
   ) => ReturnType<T>,
   protocol?: ApiProtocols<T>,
@@ -233,7 +278,10 @@ export function defineSyncApi<T extends ApiLike>(
   ) as unknown as T
 }
 
-export type DefineAsyncApiFn<T extends AsyncApiLike, P = AsyncApiOptions<T>> = (
+export type DefineAsyncApiFn<
+  T extends AsyncApiLike,
+  P extends AsyncMethodOptionLike = AsyncApiOptions<T>
+> = (
   args: P extends undefined ? undefined : Omit<P, CALLBACK_TYPES>,
   res: {
     resolve: (res: AsyncApiRes<P> | void) => void
@@ -241,7 +289,10 @@ export type DefineAsyncApiFn<T extends AsyncApiLike, P = AsyncApiOptions<T>> = (
   }
 ) => void
 
-export function defineAsyncApi<T extends AsyncApiLike, P = AsyncApiOptions<T>>(
+export function defineAsyncApi<
+  T extends AsyncApiLike,
+  P extends AsyncMethodOptionLike = AsyncApiOptions<T>
+>(
   name: string,
   fn: DefineAsyncApiFn<T>,
   protocol?: ApiProtocols<T>,
